@@ -56,10 +56,3 @@ export interface DBUserProgress {
   score: number;
   tanggal_selesai: string;
 }
-
-export interface AIGeneratedSentence {
-  indonesian: string;
-  english: string;
-  mandarin: string;
-  pinyin: string;
-}

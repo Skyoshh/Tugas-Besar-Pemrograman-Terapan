@@ -44,7 +44,6 @@ const Header: React.FC = () => {
                 <div className="flex items-center space-x-2">
                  <span>🇬🇧</span>
                </div>
-               {/* Mobile visible logout (optional icon or simplified) - keeping standard nav for now */}
              </div>
           )}
         </div>
