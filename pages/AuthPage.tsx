@@ -20,6 +20,13 @@ const AuthPage: React.FC = () => {
     clearError();
   }, [searchParams]);
   
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
+
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
