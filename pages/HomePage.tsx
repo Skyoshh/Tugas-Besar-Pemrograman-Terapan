@@ -9,7 +9,7 @@ const HomePage: React.FC = () => {
         <div className="w-48 h-48 mx-auto mb-8" dangerouslySetInnerHTML={{ __html: MASCOT_SVG }} />
         
         <h1 className="text-4xl md:text-6xl font-extrabold text-gray-800">
-          Belajar Bahasa dengan Cara Seru!
+          Belajar Bahasa Inggris dan Mandarin dengan Cara Seru!
         </h1>
         <p className="mt-4 text-lg md:text-xl text-gray-600">
           Bergabunglah dengan jutaan pelajar di seluruh dunia dan mulailah petualangan bahasamu bersama Bahasa Buddy.

@@ -30,13 +30,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const email = window.localStorage.getItem('userEmail');
       if (email) {
         const dbUser = await databaseService.getUserByEmail(email);
-        if (dbUser) {
-          if (!dbUser.learning_language) {
-            await databaseService.updateUserLanguage(dbUser.id, Language.ENGLISH);
-            dbUser.learning_language = Language.ENGLISH;
-          }
-          setUser(dbUser);
-        }
+        if (dbUser) setUser(dbUser);
       }
       setIsLoading(false);
     };
@@ -57,10 +51,6 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setError(null);
     try {
       const dbUser = await databaseService.loginUser(email, password);
-      if (!dbUser.learning_language) {
-        await databaseService.updateUserLanguage(dbUser.id, Language.ENGLISH);
-        dbUser.learning_language = Language.ENGLISH;
-      }
       setUser(dbUser);
       window.localStorage.setItem('userEmail', email);
       setIsLoading(false);
@@ -78,10 +68,6 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setError(null);
     try {
         const dbUser = await databaseService.registerUser(name, email, password);
-        if (!dbUser.learning_language) {
-          await databaseService.updateUserLanguage(dbUser.id, Language.ENGLISH);
-          dbUser.learning_language = Language.ENGLISH;
-        }
         setUser(dbUser);
         window.localStorage.setItem('userEmail', email);
         setIsLoading(false);
@@ -113,8 +99,10 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // Update: Menerima parameter score
   const completeLesson = async (lessonId: string, xp: number, score: number) => {
     if (!user || !user.id) return;
+    // Mengirim skor dinamis ke database service
     await databaseService.saveLessonProgress(user.id, lessonId, score);
     await databaseService.updateUserStats(user.id, xp);
     await refreshUser();

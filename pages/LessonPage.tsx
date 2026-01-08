@@ -12,6 +12,7 @@ enum LessonStep {
   COMPLETE,
 }
 
+// Helper component
 const VocabCard: React.FC<{ vocab: DBVocabulary, targetLang: Language, onPronounce: (text: string, langCode: string) => void }> = ({ vocab, targetLang, onPronounce }) => {
     const isEnglish = targetLang === Language.ENGLISH;
     const langCode = isEnglish ? 'en-US' : 'zh-CN';

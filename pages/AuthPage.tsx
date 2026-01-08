@@ -20,9 +20,14 @@ const AuthPage: React.FC = () => {
     clearError();
   }, [searchParams]);
   
+  // If user is already logged in
   useEffect(() => {
     if (user) {
-      navigate('/dashboard');
+        if(user.learning_language) {
+            navigate('/dashboard');
+        } else {
+            navigate('/select-language');
+        }
     }
   }, [user, navigate]);
 
@@ -45,6 +50,7 @@ const AuthPage: React.FC = () => {
     const newMode = mode === 'login' ? 'register' : 'login';
     setMode(newMode);
     setSearchParams({ mode: newMode });
+    // Reset form inputs except email maybe? better clean all
     setPassword('');
     setName('');
   };

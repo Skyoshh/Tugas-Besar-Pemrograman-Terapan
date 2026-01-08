@@ -6,6 +6,7 @@ import HomePage from './pages/HomePage';
 import LanguageSelectionPage from './pages/LanguageSelectionPage';
 import DashboardPage from './pages/DashboardPage';
 import LessonPage from './pages/LessonPage';
+import ProfilePage from './pages/ProfilePage';
 import AuthPage from './pages/AuthPage';
 import Header from './components/Header';
 
@@ -24,6 +25,7 @@ const AppContent: React.FC = () => {
                     <Route path="/select-language" element={<LanguageSelectionPage />} />
                     <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/lesson/:lessonId" element={<LessonPage />} />
+                    <Route path="/profile" element={<ProfilePage />} />
                 </Routes>
             </main>
         </>

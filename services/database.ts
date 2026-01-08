@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import { DBUser, DBTopic, DBVocabulary, DBExercise, DBUserProgress, Language } from '../types';
 
+// Konfigurasi Supabase dari input user
 const supabaseUrl = 'https://rbjntlzmtcvlazqbcthn.supabase.co';
 const supabaseKey = 'sb_publishable_G_uroxxDOYLpVyEYQdtSAw_NQfHcvh1';
 
@@ -12,12 +13,19 @@ if (!supabaseUrl || !supabaseKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
+// --- SERVICE METHODS (SUPABASE IMPLEMENTATION) ---
+
 export const databaseService = {
+  // Init tidak lagi diperlukan untuk Supabase client-side
   init: async () => {
     return true;
   },
 
+  // --- AUTHENTICATION ---
+
+  // Login: Cek Email di DB, lalu bandingkan Hash Password
   loginUser: async (email: string, password: string): Promise<DBUser> => {
+    // 1. Ambil user berdasarkan email saja
     const { data, error } = await supabase
       .from('pengguna')
       .select('*')
@@ -29,13 +37,19 @@ export const databaseService = {
     }
 
     const user = data as DBUser;
+
+    // 2. Verifikasi password menggunakan bcrypt
+    // Jika user.password undefined (data lama), fallback ke plain comparison
     let isValid = false;
     
     if (user.password) {
+        // Coba compare hash
         isValid = await bcrypt.compare(password, user.password);
         
+        // Fallback: Jika compare hash gagal, cek apakah password di DB masih plain text (untuk support akun lama)
         if (!isValid && user.password === password) {
             isValid = true;
+            // Opsional: Update ke hash agar aman ke depannya (Auto-migration)
             const salt = await bcrypt.genSalt(10);
             const newHash = await bcrypt.hash(password, salt);
             await supabase.from('pengguna').update({ password: newHash }).eq('id', user.id);
@@ -49,7 +63,9 @@ export const databaseService = {
     return user;
   },
 
+  // Register: Hash password sebelum insert
   registerUser: async (nama: string, email: string, password: string): Promise<DBUser> => {
+    // 1. Cek apakah email sudah ada
     const { data: existingUser } = await supabase
         .from('pengguna')
         .select('id')
@@ -60,18 +76,20 @@ export const databaseService = {
         throw new Error('Email sudah terdaftar. Silakan masuk.');
     }
 
+    // 2. Hash Password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // 3. Buat user baru dengan password terenkripsi
     const newUser = {
       nama_lengkap: nama,
       email: email,
-      password: hashedPassword,
+      password: hashedPassword, // Simpan Hash, bukan Plain Text
       total_xp: 0,
       level: 1,
       daily_streak: 1,
       last_login: new Date().toISOString(),
-      learning_language: Language.ENGLISH
+      learning_language: null
     };
 
     const { data, error } = await supabase
@@ -88,6 +106,7 @@ export const databaseService = {
     return data as DBUser;
   },
   
+  // Get User by Email (tanpa password check, untuk session rehydration)
   getUserByEmail: async (email: string): Promise<DBUser | undefined> => {
     const { data, error } = await supabase
       .from('pengguna')
@@ -109,6 +128,7 @@ export const databaseService = {
   },
   
   updateUserStats: async (userId: string, xpToAdd: number) => {
+    // 1. Ambil user saat ini
     const { data: user, error: fetchError } = await supabase
         .from('pengguna')
         .select('*')
@@ -116,6 +136,8 @@ export const databaseService = {
         .single();
     
     if (fetchError || !user) return;
+
+    // 2. Hitung logika streak
     const today = new Date().toISOString().split('T')[0];
     const lastLogin = user.last_login ? user.last_login.split('T')[0] : '';
     
@@ -156,6 +178,7 @@ export const databaseService = {
     if (error) console.error("Error reset progress:", error);
   },
 
+  // Content
   getTopicsByLanguage: async (language: Language): Promise<DBTopic[]> => {
     const { data, error } = await supabase
         .from('topik')
@@ -182,6 +205,7 @@ export const databaseService = {
     };
   },
 
+  // Progress
   getUserProgress: async (userId: string): Promise<DBUserProgress[]> => {
     const { data, error } = await supabase
         .from('progres_pengguna')
@@ -203,6 +227,7 @@ export const databaseService = {
     const timestamp = new Date().toISOString();
 
     if (!existing) {
+        // Insert baru jika belum ada
         const newProgress = {
             pengguna_id: userId,
             topik_id: topicId,
@@ -212,6 +237,8 @@ export const databaseService = {
         };
         await supabase.from('progres_pengguna').insert([newProgress]);
     } else {
+        // Update jika sudah ada (misal mengulang latihan untuk perbaikan skor)
+        // Kita update skor dan tanggal selesai
         await supabase
             .from('progres_pengguna')
             .update({ 
