@@ -20,7 +20,6 @@ const AuthPage: React.FC = () => {
     clearError();
   }, [searchParams]);
   
-  // If user is already logged in
   useEffect(() => {
     if (user) {
         if(user.learning_language) {

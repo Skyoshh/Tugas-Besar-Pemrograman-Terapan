@@ -12,7 +12,15 @@ enum LessonStep {
   COMPLETE,
 }
 
-// Helper component
+const shuffleArray = (array: string[]) => {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+};
+
 const VocabCard: React.FC<{ vocab: DBVocabulary, targetLang: Language, onPronounce: (text: string, langCode: string) => void }> = ({ vocab, targetLang, onPronounce }) => {
     const isEnglish = targetLang === Language.ENGLISH;
     const langCode = isEnglish ? 'en-US' : 'zh-CN';
@@ -35,30 +43,31 @@ const LessonPage: React.FC = () => {
     const navigate = useNavigate();
     const { user, completeLesson } = useUser();
     
-    // Data State
     const [lessonData, setLessonData] = useState<{vocab: DBVocabulary[], exercises: DBExercise[]} | null>(null);
     const [currentTopic, setCurrentTopic] = useState<DBTopic | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Flow State
     const [step, setStep] = useState<LessonStep>(LessonStep.VOCABULARY);
     const [currentVocabIndex, setCurrentVocabIndex] = useState(0);
     const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
-    const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+
     const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
     const [correctAnswers, setCorrectAnswers] = useState(0);
+
+    const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+
+    const [dragAvailableWords, setDragAvailableWords] = useState<{id: number, text: string}[]>([]);
+    const [dragSelectedWords, setDragSelectedWords] = useState<{id: number, text: string}[]>([]);
 
     useEffect(() => {
         const fetchLesson = async () => {
             if (!lessonId || !user?.learning_language) return;
             setLoading(true);
             try {
-                // Fetch topic detail to get XP reward
                 const allTopics = await databaseService.getTopicsByLanguage(user.learning_language);
                 const topic = allTopics.find(t => t.id === lessonId);
                 setCurrentTopic(topic || null);
 
-                // Fetch lesson content
                 const data = await databaseService.getLessonData(lessonId);
                 setLessonData(data);
             } catch (error) {
@@ -77,7 +86,6 @@ const LessonPage: React.FC = () => {
     }, []);
 
     const handleStartQuiz = () => {
-         // Jika soal kosong (0 exercises), auto complete dengan skor 100 (bonus)
         if (lessonData && lessonData.exercises.length === 0 && currentTopic) {
              completeLesson(currentTopic.id, currentTopic.xp_reward, 100);
              setStep(LessonStep.COMPLETE);
@@ -86,27 +94,47 @@ const LessonPage: React.FC = () => {
         setStep(LessonStep.QUIZ);
     }
 
+    const currentQuestion = lessonData?.exercises[currentQuizIndex];
+    useEffect(() => {
+        if (currentQuestion) {
+            setSelectedAnswer(null);
+            setIsCorrect(null);
+            
+            if (currentQuestion.tipe_latihan === 'drag-and-drop') {
+                const words = shuffleArray([...currentQuestion.opsi_jawaban]).map((word, idx) => ({
+                    id: idx,
+                    text: word
+                }));
+                setDragAvailableWords(words);
+                setDragSelectedWords([]);
+            }
+        }
+    }, [currentQuestion]);
+
     const handleNextVocab = () => {
         if (lessonData && currentVocabIndex < lessonData.vocab.length - 1) {
             setCurrentVocabIndex(prev => prev + 1);
         } else {
-            // Langsung lanjut ke kuis setelah kosakata habis
             handleStartQuiz();
         }
     };
     
-    const currentQuestion = lessonData?.exercises[currentQuizIndex];
 
     const handleCheckAnswer = () => {
-        if (!currentQuestion || selectedAnswer === null || !currentTopic) return;
+        if (!currentQuestion || !currentTopic) return;
         
-        // Cek jawaban
-        const isAnswerCorrect = selectedAnswer.trim().toLowerCase() === currentQuestion.jawaban_benar.toLowerCase();
+        let isAnswerCorrect = false;
+
+        if (currentQuestion.tipe_latihan === 'drag-and-drop') {
+            const userAnswer = dragSelectedWords.map(w => w.text).join(' ');
+            isAnswerCorrect = userAnswer.trim().toLowerCase() === currentQuestion.jawaban_benar.trim().toLowerCase();
+        } else {
+            if (selectedAnswer === null) return;
+            isAnswerCorrect = selectedAnswer.trim().toLowerCase() === currentQuestion.jawaban_benar.toLowerCase();
+        }
         
-        // Simpan state lokal untuk UI
         setIsCorrect(isAnswerCorrect);
         
-        // Hitung jumlah benar yang BARU (karena state correctAnswers belum update di siklus ini)
         const newCorrectCount = isAnswerCorrect ? correctAnswers + 1 : correctAnswers;
 
         if(isAnswerCorrect) setCorrectAnswers(prev => prev + 1);
@@ -117,9 +145,7 @@ const LessonPage: React.FC = () => {
             if (lessonData && currentQuizIndex < lessonData.exercises.length - 1) {
                 setCurrentQuizIndex(prev => prev + 1);
             } else {
-                // Kuis Selesai
                 const totalQuestions = lessonData.exercises.length;
-                // Hitung Skor (0 - 100)
                 const finalScore = totalQuestions > 0 
                     ? Math.round((newCorrectCount / totalQuestions) * 100) 
                     : 100;
@@ -130,9 +156,20 @@ const LessonPage: React.FC = () => {
         }, 1500);
     };
 
+    const handleWordClick = (wordObj: {id: number, text: string}, from: 'available' | 'selected') => {
+        if (isCorrect !== null) return;
+
+        if (from === 'available') {
+            setDragAvailableWords(prev => prev.filter(w => w.id !== wordObj.id));
+            setDragSelectedWords(prev => [...prev, wordObj]);
+        } else {
+            setDragSelectedWords(prev => prev.filter(w => w.id !== wordObj.id));
+            setDragAvailableWords(prev => [...prev, wordObj]);
+        }
+    };
+
     const handleForceComplete = () => {
         if (currentTopic) {
-            // Force complete manual (biasanya karena soal kosong), beri nilai 100
             completeLesson(currentTopic.id, currentTopic.xp_reward, 100);
             setStep(LessonStep.COMPLETE);
         }
@@ -172,7 +209,6 @@ const LessonPage: React.FC = () => {
                 );
 
             case LessonStep.QUIZ:
-                // KONDISI JIKA LATIHAN KOSONG (DATABASE BELUM DIISI)
                 if (lessonData.exercises.length === 0) {
                     return (
                         <div className="text-center max-w-md p-6 bg-white rounded-2xl shadow-sm border">
@@ -194,8 +230,11 @@ const LessonPage: React.FC = () => {
                 
                 return (
                     <div className="w-full max-w-2xl">
-                        <h2 className="text-2xl font-bold mb-4 text-center text-gray-800">{currentQuestion.pertanyaan}</h2>
-                        {currentQuestion.tipe_latihan === 'multiple-choice' ? (
+                        <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">{currentQuestion.pertanyaan}</h2>
+                        
+                        {}
+                        
+                        {currentQuestion.tipe_latihan === 'multiple-choice' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {currentQuestion.opsi_jawaban.map(option => (
                                     <button
@@ -212,7 +251,9 @@ const LessonPage: React.FC = () => {
                                     </button>
                                 ))}
                             </div>
-                        ) : (
+                        )}
+
+                        {(currentQuestion.tipe_latihan === 'fill-in-the-blank') && (
                             <input
                                 type="text"
                                 value={selectedAnswer || ''}
@@ -225,7 +266,55 @@ const LessonPage: React.FC = () => {
                                 `}
                             />
                         )}
-                        <button onClick={handleCheckAnswer} disabled={!selectedAnswer || isCorrect !== null} className="mt-8 w-full bg-green-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors">
+
+                        {currentQuestion.tipe_latihan === 'drag-and-drop' && (
+                            <div className="space-y-8">
+                                {}
+                                <div className="min-h-[80px] p-2 border-b-2 border-gray-200 flex flex-wrap gap-2 items-center justify-center transition-colors">
+                                    {dragSelectedWords.length === 0 && (
+                                        <span className="text-gray-400 text-sm select-none">Ketuk kata untuk menyusun kalimat</span>
+                                    )}
+                                    {dragSelectedWords.map((word) => (
+                                        <button
+                                            key={word.id}
+                                            onClick={() => handleWordClick(word, 'selected')}
+                                            disabled={isCorrect !== null}
+                                            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-xl shadow-sm text-gray-800 font-bold hover:bg-red-50 hover:border-red-200 transition-all animate-fade-in"
+                                        >
+                                            {word.text}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {}
+                                <div className="flex flex-wrap gap-3 justify-center">
+                                    {dragAvailableWords.map((word) => (
+                                        <button
+                                            key={word.id}
+                                            onClick={() => handleWordClick(word, 'available')}
+                                            disabled={isCorrect !== null}
+                                            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-xl shadow-[0_2px_0_0_rgba(0,0,0,0.1)] active:shadow-none active:translate-y-[2px] text-gray-800 font-bold hover:bg-gray-50 transition-all"
+                                        >
+                                            {word.text}
+                                        </button>
+                                    ))}
+                                    {}
+                                    {dragAvailableWords.length === 0 && (
+                                         <div className="h-10 w-full"></div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        <button 
+                            onClick={handleCheckAnswer} 
+                            disabled={
+                                (currentQuestion.tipe_latihan === 'drag-and-drop' && dragSelectedWords.length === 0) ||
+                                (currentQuestion.tipe_latihan !== 'drag-and-drop' && !selectedAnswer) || 
+                                isCorrect !== null
+                            } 
+                            className="mt-8 w-full bg-green-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-green-700 disabled:bg-gray-300 disabled:text-gray-500 transition-colors"
+                        >
                             Periksa
                         </button>
                     </div>
@@ -257,9 +346,12 @@ const LessonPage: React.FC = () => {
                 {renderContent()}
             </div>
             {isCorrect !== null && (
-                <div className={`fixed bottom-0 left-0 right-0 p-6 text-white text-xl font-bold flex items-center gap-4 ${isCorrect ? 'bg-green-500' : 'bg-red-500'}`}>
+                <div className={`fixed bottom-0 left-0 right-0 p-6 text-white text-xl font-bold flex items-center gap-4 animate-slide-up ${isCorrect ? 'bg-green-500' : 'bg-red-500'}`}>
                     {isCorrect ? <CheckCircleIcon className="w-8 h-8"/> : <XCircleIcon className="w-8 h-8"/>}
-                    {isCorrect ? 'Jawaban Benar!' : `Jawaban yang benar: ${currentQuestion?.jawaban_benar}`}
+                    <div>
+                        <p>{isCorrect ? 'Jawaban Benar!' : 'Jawaban Salah'}</p>
+                        {!isCorrect && <p className="text-sm font-normal opacity-90">Jawaban yang benar: {currentQuestion?.jawaban_benar}</p>}
+                    </div>
                 </div>
             )}
         </div>

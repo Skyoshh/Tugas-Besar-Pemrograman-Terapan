@@ -52,6 +52,7 @@ const Header: React.FC = () => {
                 <div className="flex items-center space-x-2">
                  <span>{getFlag(user.learning_language)}</span>
                </div>
+               {}
              </div>
           )}
         </div>

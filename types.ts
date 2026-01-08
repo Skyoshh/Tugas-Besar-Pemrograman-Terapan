@@ -6,20 +6,20 @@ export enum Language {
 
 // Representasi tabel 'Pengguna'
 export interface DBUser {
-  id: string; // Changed to string to support Supabase UUID
+  id: string;
   nama_lengkap: string;
-  email: string; // Unique
-  password?: string; // Ditambahkan untuk autentikasi
+  email: string;
+  password?: string;
   total_xp: number;
   level: number;
   daily_streak: number;
-  last_login: string; // ISO Date string
+  last_login: string;
   learning_language: Language | null;
 }
 
 // Representasi tabel 'Bahasa'
 export interface DBLanguage {
-  id: string; // 'ENGLISH' | 'MANDARIN'
+  id: string;
   nama_bahasa: string;
 }
 
@@ -39,24 +39,24 @@ export interface DBVocabulary {
   id?: number | string;
   topik_id: string;
   indonesian: string;
-  target_word: string; // English / Mandarin character
-  pinyin?: string; // Optional for Mandarin
+  target_word: string;
+  pinyin?: string;
 }
 
 // Representasi tabel 'Latihan'
 export interface DBExercise {
   id?: number | string;
   topik_id: string;
-  tipe_latihan: 'multiple-choice' | 'fill-in-the-blank';
+  tipe_latihan: 'multiple-choice' | 'fill-in-the-blank' | 'drag-and-drop';
   pertanyaan: string;
   jawaban_benar: string;
-  opsi_jawaban: string[]; // Disimpan sebagai array string untuk simplifikasi tabel Opsi_Jawaban
+  opsi_jawaban: string[];
 }
 
 // Representasi tabel 'Progres_Pengguna'
 export interface DBUserProgress {
   id?: number | string;
-  pengguna_id: string; // References DBUser.id
+  pengguna_id: string;
   topik_id: string;
   status: 'locked' | 'unlocked' | 'completed';
   score: number;

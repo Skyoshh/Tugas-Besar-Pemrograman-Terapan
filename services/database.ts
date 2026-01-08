@@ -16,7 +16,6 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 // --- SERVICE METHODS (SUPABASE IMPLEMENTATION) ---
 
 export const databaseService = {
-  // Init tidak lagi diperlukan untuk Supabase client-side
   init: async () => {
     return true;
   },
@@ -39,17 +38,13 @@ export const databaseService = {
     const user = data as DBUser;
 
     // 2. Verifikasi password menggunakan bcrypt
-    // Jika user.password undefined (data lama), fallback ke plain comparison
     let isValid = false;
     
     if (user.password) {
-        // Coba compare hash
         isValid = await bcrypt.compare(password, user.password);
         
-        // Fallback: Jika compare hash gagal, cek apakah password di DB masih plain text (untuk support akun lama)
         if (!isValid && user.password === password) {
             isValid = true;
-            // Opsional: Update ke hash agar aman ke depannya (Auto-migration)
             const salt = await bcrypt.genSalt(10);
             const newHash = await bcrypt.hash(password, salt);
             await supabase.from('pengguna').update({ password: newHash }).eq('id', user.id);
@@ -84,7 +79,7 @@ export const databaseService = {
     const newUser = {
       nama_lengkap: nama,
       email: email,
-      password: hashedPassword, // Simpan Hash, bukan Plain Text
+      password: hashedPassword,
       total_xp: 0,
       level: 1,
       daily_streak: 1,
@@ -227,7 +222,6 @@ export const databaseService = {
     const timestamp = new Date().toISOString();
 
     if (!existing) {
-        // Insert baru jika belum ada
         const newProgress = {
             pengguna_id: userId,
             topik_id: topicId,
@@ -237,8 +231,6 @@ export const databaseService = {
         };
         await supabase.from('progres_pengguna').insert([newProgress]);
     } else {
-        // Update jika sudah ada (misal mengulang latihan untuk perbaikan skor)
-        // Kita update skor dan tanggal selesai
         await supabase
             .from('progres_pengguna')
             .update({ 
