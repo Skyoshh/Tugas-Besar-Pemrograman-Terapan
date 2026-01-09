@@ -6,15 +6,15 @@ import { DBTopic, DBUserProgress } from '../types';
 import { CheckCircleIcon, StarIcon } from '../components/icons';
 import { databaseService } from '../services/database';
 
-const VERTICAL_SPACING = 140;
-const NODE_OFFSET_TOP = 48;
+const VERTICAL_SPACING = 140; 
+const NODE_OFFSET_TOP = 48;  
 
 const LessonNode: React.FC<{ lesson: DBTopic; isCompleted: boolean; isUnlocked: boolean; index: number; total: number }> = ({ lesson, isCompleted, isUnlocked, index, total }) => {
   const getPositionStyle = (i: number) => {
     const cycle = i % 4;
-    let left = '50%';
-    if (cycle === 1) left = '25%';
-    if (cycle === 3) left = '75%';
+    let left = '50%'; 
+    if (cycle === 1) left = '25%'; 
+    if (cycle === 3) left = '75%'; 
     
     return { left, top: `${i * VERTICAL_SPACING}px` };
   };
@@ -33,7 +33,6 @@ const LessonNode: React.FC<{ lesson: DBTopic; isCompleted: boolean; isUnlocked: 
         `}>
           <div className="text-4xl drop-shadow-md select-none">{lesson.icon}</div>
           
-          {}
           {isCompleted && (
              <div className="absolute -top-2 -right-2 bg-yellow-400 rounded-full p-1 border-2 border-white shadow-sm">
                 <CheckCircleIcon className="w-6 h-6 text-white" />
@@ -87,26 +86,41 @@ const DashboardPage: React.FC = () => {
             setLoadingData(false);
         }
     };
-    fetchData();
+    if (user && user.role !== 'admin') {
+       fetchData();
+    }
   }, [learning_language, user]);
 
-  const pathD = useMemo(() => {
+  if (isLoading) return <div className="p-8 text-center">Memuat Pengguna...</div>;
+  if (!user) return <Navigate to="/auth" />;
+  
+  if (user.role === 'admin') {
+      return <Navigate to="/admin" />;
+  }
+
+  if (!learning_language) {
+    return <Navigate to="/select-language" />;
+  }
+
+  if (loadingData) return <div className="p-8 text-center">Menyiapkan kurikulum...</div>;
+
+  const generatePath = () => {
     if (topics.length === 0) return "";
     
     let currentX = 100;
-    let currentY = NODE_OFFSET_TOP;
+    let currentY = NODE_OFFSET_TOP; 
 
     let path = `M ${currentX} ${currentY} `;
 
     topics.forEach((_, i) => {
-        if (i === topics.length - 1) return;
+        if (i === topics.length - 1) return; 
 
         const nextIndex = i + 1;
         
         const cycle = nextIndex % 4;
         let nextX = 100;
-        if (cycle === 1) nextX = 50;
-        if (cycle === 3) nextX = 150;
+        if (cycle === 1) nextX = 50;  
+        if (cycle === 3) nextX = 150; 
         
         const nextY = (nextIndex * VERTICAL_SPACING) + NODE_OFFSET_TOP;
 
@@ -123,16 +137,9 @@ const DashboardPage: React.FC = () => {
     });
 
     return path;
-  }, [topics]);
+  };
 
-  if (isLoading) return <div className="p-8 text-center">Memuat Pengguna...</div>;
-  if (!user) return <Navigate to="/auth" />;
-  if (!learning_language) {
-    return <Navigate to="/select-language" />;
-  }
-
-  if (loadingData) return <div className="p-8 text-center">Menyiapkan kurikulum...</div>;
-
+  const pathD = generatePath();
   const completedLessonIds = progress.map(p => p.topik_id);
   const containerHeight = (topics.length * VERTICAL_SPACING) + 100; 
 
@@ -145,17 +152,13 @@ const DashboardPage: React.FC = () => {
         </p>
       </div>
 
-      {}
       <div className="relative w-full max-w-md mx-auto" style={{ height: `${containerHeight}px` }}>
         
-        {}
-        {}
         <svg 
             className="absolute top-0 left-0 w-full h-full z-0 overflow-visible"
             viewBox={`0 0 200 ${containerHeight}`} 
             preserveAspectRatio="none" 
         >
-          {}
           <path 
             d={pathD} 
             stroke="#e5e7eb" 
@@ -164,7 +167,6 @@ const DashboardPage: React.FC = () => {
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          {}
            <path 
             d={pathD} 
             stroke="#fbbf24" 
@@ -175,7 +177,6 @@ const DashboardPage: React.FC = () => {
           />
         </svg>
 
-        {}
         {topics.map((lesson, index) => {
           const isCompleted = completedLessonIds.includes(lesson.id);
           const isUnlocked = index === 0 || completedLessonIds.includes(topics[index-1]?.id);
@@ -192,7 +193,7 @@ const DashboardPage: React.FC = () => {
         })}
       </div>
       
-      <div className="h-24"></div> {}
+      <div className="h-24"></div> {/* Bottom spacer */}
     </div>
   );
 };

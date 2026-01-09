@@ -3,7 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import { DBUser, DBTopic, DBVocabulary, DBExercise, DBUserProgress, Language } from '../types';
 
-// Konfigurasi Supabase dari input user
 const supabaseUrl = 'https://rbjntlzmtcvlazqbcthn.supabase.co';
 const supabaseKey = 'sb_publishable_G_uroxxDOYLpVyEYQdtSAw_NQfHcvh1';
 
@@ -13,18 +12,12 @@ if (!supabaseUrl || !supabaseKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- SERVICE METHODS (SUPABASE IMPLEMENTATION) ---
 
 export const databaseService = {
   init: async () => {
     return true;
   },
-
-  // --- AUTHENTICATION ---
-
-  // Login: Cek Email di DB, lalu bandingkan Hash Password
   loginUser: async (email: string, password: string): Promise<DBUser> => {
-    // 1. Ambil user berdasarkan email saja
     const { data, error } = await supabase
       .from('pengguna')
       .select('*')
@@ -37,19 +30,11 @@ export const databaseService = {
 
     const user = data as DBUser;
 
-    // 2. Verifikasi password menggunakan bcrypt
-    let isValid = false;
-    
-    if (user.password) {
-        isValid = await bcrypt.compare(password, user.password);
-        
-        if (!isValid && user.password === password) {
-            isValid = true;
-            const salt = await bcrypt.genSalt(10);
-            const newHash = await bcrypt.hash(password, salt);
-            await supabase.from('pengguna').update({ password: newHash }).eq('id', user.id);
-        }
+    if (!user.password) {
+        throw new Error('Akun ini memiliki masalah konfigurasi (password hilang). Hubungi admin.');
     }
+    
+    const isValid = await bcrypt.compare(password, user.password);
 
     if (!isValid) {
       throw new Error('Kata sandi salah.');
@@ -58,9 +43,7 @@ export const databaseService = {
     return user;
   },
 
-  // Register: Hash password sebelum insert
   registerUser: async (nama: string, email: string, password: string): Promise<DBUser> => {
-    // 1. Cek apakah email sudah ada
     const { data: existingUser } = await supabase
         .from('pengguna')
         .select('id')
@@ -71,20 +54,19 @@ export const databaseService = {
         throw new Error('Email sudah terdaftar. Silakan masuk.');
     }
 
-    // 2. Hash Password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // 3. Buat user baru dengan password terenkripsi
     const newUser = {
       nama_lengkap: nama,
       email: email,
-      password: hashedPassword,
+      password: hashedPassword, 
       total_xp: 0,
       level: 1,
       daily_streak: 1,
       last_login: new Date().toISOString(),
-      learning_language: null
+      learning_language: null,
+      role: 'user' 
     };
 
     const { data, error } = await supabase
@@ -101,7 +83,6 @@ export const databaseService = {
     return data as DBUser;
   },
   
-  // Get User by Email (tanpa password check, untuk session rehydration)
   getUserByEmail: async (email: string): Promise<DBUser | undefined> => {
     const { data, error } = await supabase
       .from('pengguna')
@@ -123,7 +104,6 @@ export const databaseService = {
   },
   
   updateUserStats: async (userId: string, xpToAdd: number) => {
-    // 1. Ambil user saat ini
     const { data: user, error: fetchError } = await supabase
         .from('pengguna')
         .select('*')
@@ -132,7 +112,6 @@ export const databaseService = {
     
     if (fetchError || !user) return;
 
-    // 2. Hitung logika streak
     const today = new Date().toISOString().split('T')[0];
     const lastLogin = user.last_login ? user.last_login.split('T')[0] : '';
     
@@ -173,7 +152,6 @@ export const databaseService = {
     if (error) console.error("Error reset progress:", error);
   },
 
-  // Content
   getTopicsByLanguage: async (language: Language): Promise<DBTopic[]> => {
     const { data, error } = await supabase
         .from('topik')
@@ -200,7 +178,6 @@ export const databaseService = {
     };
   },
 
-  // Progress
   getUserProgress: async (userId: string): Promise<DBUserProgress[]> => {
     const { data, error } = await supabase
         .from('progres_pengguna')
@@ -239,5 +216,116 @@ export const databaseService = {
             })
             .eq('id', existing.id);
     }
+  },
+
+  getAdminStats: async () => {
+    const [users, topicsEn, topicsZh] = await Promise.all([
+      supabase.from('pengguna').select('*', { count: 'exact', head: true }),
+      supabase.from('topik').select('*', { count: 'exact', head: true }).eq('bahasa_id', Language.ENGLISH),
+      supabase.from('topik').select('*', { count: 'exact', head: true }).eq('bahasa_id', Language.MANDARIN),
+    ]);
+
+    return {
+      totalUsers: users.count || 0,
+      totalEnglishTopics: topicsEn.count || 0,
+      totalMandarinTopics: topicsZh.count || 0,
+    };
+  },
+
+  getRecentUsers: async (limit: number = 5): Promise<DBUser[]> => {
+    const { data, error } = await supabase
+      .from('pengguna')
+      .select('*')
+      .order('last_login', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+        console.error("Error fetching recent users:", error);
+        return [];
+    }
+    return data as DBUser[];
+  },
+
+  getAllUsers: async (): Promise<DBUser[]> => {
+      const { data, error } = await supabase
+          .from('pengguna')
+          .select('*')
+          .order('nama_lengkap', { ascending: true });
+
+      if(error) throw new Error(error.message);
+      return data as DBUser[];
+  },
+
+  createUserByAdmin: async (userData: Partial<DBUser> & { password?: string }): Promise<DBUser> => {
+      if (!userData.email || !userData.nama_lengkap || !userData.password) {
+          throw new Error("Data tidak lengkap");
+      }
+
+      const { data: existing } = await supabase.from('pengguna').select('id').eq('email', userData.email).single();
+      if (existing) throw new Error("Email sudah digunakan");
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(userData.password, salt);
+
+      const newUser = {
+          nama_lengkap: userData.nama_lengkap,
+          email: userData.email,
+          password: hashedPassword,
+          role: userData.role || 'user',
+          total_xp: 0,
+          level: 1,
+          daily_streak: 0,
+          last_login: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase.from('pengguna').insert([newUser]).select().single();
+      
+      if (error) throw new Error(error.message);
+      return data as DBUser;
+  },
+
+  updateUser: async (id: string, updates: Partial<DBUser> & { password?: string }) => {
+      const dataToUpdate: any = { ...updates };
+      
+      if (!dataToUpdate.password) {
+          delete dataToUpdate.password;
+      } else {
+          const salt = await bcrypt.genSalt(10);
+          dataToUpdate.password = await bcrypt.hash(dataToUpdate.password, salt);
+      }
+
+      delete dataToUpdate.id;
+
+      const { error } = await supabase
+          .from('pengguna')
+          .update(dataToUpdate)
+          .eq('id', id);
+
+      if (error) throw new Error(error.message);
+  },
+
+  deleteUser: async (id: string) => {
+      const { data: user, error: fetchError } = await supabase
+        .from('pengguna')
+        .select('learning_language')
+        .eq('id', id)
+        .single();
+      
+      if (fetchError) throw new Error(fetchError.message);
+
+      const { count, error: countError } = await supabase
+        .from('progres_pengguna')
+        .select('*', { count: 'exact', head: true })
+        .eq('pengguna_id', id);
+      
+      if (countError) throw new Error(countError.message);
+
+      if (user.learning_language !== null || (count && count > 0)) {
+          throw new Error("TIDAK BISA DIHAPUS: Pengguna ini aktif belajar (sudah memilih bahasa atau menyelesaikan topik).");
+      }
+
+      const { error } = await supabase.from('pengguna').delete().eq('id', id);
+      if (error) throw new Error(error.message);
   }
+
 };

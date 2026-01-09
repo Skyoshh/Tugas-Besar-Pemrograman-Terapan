@@ -22,6 +22,11 @@ const AuthPage: React.FC = () => {
   
   useEffect(() => {
     if (user) {
+        if (user.role === 'admin') {
+            navigate('/admin');
+            return;
+        }
+
         if(user.learning_language) {
             navigate('/dashboard');
         } else {
@@ -49,7 +54,6 @@ const AuthPage: React.FC = () => {
     const newMode = mode === 'login' ? 'register' : 'login';
     setMode(newMode);
     setSearchParams({ mode: newMode });
-    // Reset form inputs except email maybe? better clean all
     setPassword('');
     setName('');
   };

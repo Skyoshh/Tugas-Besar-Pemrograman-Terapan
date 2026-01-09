@@ -157,7 +157,7 @@ const LessonPage: React.FC = () => {
     };
 
     const handleWordClick = (wordObj: {id: number, text: string}, from: 'available' | 'selected') => {
-        if (isCorrect !== null) return;
+        if (isCorrect !== null) return; 
 
         if (from === 'available') {
             setDragAvailableWords(prev => prev.filter(w => w.id !== wordObj.id));
@@ -232,7 +232,6 @@ const LessonPage: React.FC = () => {
                     <div className="w-full max-w-2xl">
                         <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">{currentQuestion.pertanyaan}</h2>
                         
-                        {}
                         
                         {currentQuestion.tipe_latihan === 'multiple-choice' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -269,7 +268,6 @@ const LessonPage: React.FC = () => {
 
                         {currentQuestion.tipe_latihan === 'drag-and-drop' && (
                             <div className="space-y-8">
-                                {}
                                 <div className="min-h-[80px] p-2 border-b-2 border-gray-200 flex flex-wrap gap-2 items-center justify-center transition-colors">
                                     {dragSelectedWords.length === 0 && (
                                         <span className="text-gray-400 text-sm select-none">Ketuk kata untuk menyusun kalimat</span>
@@ -286,7 +284,6 @@ const LessonPage: React.FC = () => {
                                     ))}
                                 </div>
 
-                                {}
                                 <div className="flex flex-wrap gap-3 justify-center">
                                     {dragAvailableWords.map((word) => (
                                         <button
@@ -298,7 +295,6 @@ const LessonPage: React.FC = () => {
                                             {word.text}
                                         </button>
                                     ))}
-                                    {}
                                     {dragAvailableWords.length === 0 && (
                                          <div className="h-10 w-full"></div>
                                     )}
