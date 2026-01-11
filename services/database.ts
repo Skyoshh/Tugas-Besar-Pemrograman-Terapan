@@ -17,6 +17,7 @@ export const databaseService = {
   init: async () => {
     return true;
   },
+
   loginUser: async (email: string, password: string): Promise<DBUser> => {
     const { data, error } = await supabase
       .from('pengguna')
@@ -60,13 +61,13 @@ export const databaseService = {
     const newUser = {
       nama_lengkap: nama,
       email: email,
-      password: hashedPassword, 
+      password: hashedPassword,
       total_xp: 0,
       level: 1,
       daily_streak: 1,
       last_login: new Date().toISOString(),
       learning_language: null,
-      role: 'user' 
+      role: 'user'
     };
 
     const { data, error } = await supabase
@@ -325,6 +326,50 @@ export const databaseService = {
       }
 
       const { error } = await supabase.from('pengguna').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+  },
+
+
+  adminCreateTopic: async (topic: Omit<DBTopic, 'id'>): Promise<DBTopic> => {
+      const slug = topic.judul_topik.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
+      const prefix = topic.bahasa_id === Language.ENGLISH ? 'en' : 'zh';
+      const random = Math.floor(Math.random() * 1000);
+      const customId = `${prefix}-${slug}-${random}`;
+
+      const newTopic = {
+          id: customId,
+          ...topic
+      };
+
+      const { data, error } = await supabase
+          .from('topik')
+          .insert([newTopic])
+          .select()
+          .single();
+
+      if (error) throw new Error(error.message);
+      return data as DBTopic;
+  },
+
+  adminUpdateTopic: async (id: string, updates: Partial<DBTopic>) => {
+      const { error } = await supabase
+          .from('topik')
+          .update(updates)
+          .eq('id', id);
+
+      if (error) throw new Error(error.message);
+  },
+
+  adminDeleteTopic: async (id: string) => {
+      const { count: vocabCount } = await supabase.from('kosakata').select('*', { count: 'exact', head: true }).eq('topik_id', id);
+      const { count: exCount } = await supabase.from('latihan').select('*', { count: 'exact', head: true }).eq('topik_id', id);
+      const { count: progCount } = await supabase.from('progres_pengguna').select('*', { count: 'exact', head: true }).eq('topik_id', id);
+
+      if ((vocabCount && vocabCount > 0) || (exCount && exCount > 0) || (progCount && progCount > 0)) {
+          throw new Error("TIDAK BISA DIHAPUS: Topik ini memiliki konten (Kosakata/Latihan) atau riwayat pengerjaan user. Hapus konten terkait terlebih dahulu.");
+      }
+
+      const { error } = await supabase.from('topik').delete().eq('id', id);
       if (error) throw new Error(error.message);
   }
 

@@ -50,7 +50,7 @@ const LessonPage: React.FC = () => {
     const [step, setStep] = useState<LessonStep>(LessonStep.VOCABULARY);
     const [currentVocabIndex, setCurrentVocabIndex] = useState(0);
     const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
-
+    
     const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
     const [correctAnswers, setCorrectAnswers] = useState(0);
 
@@ -157,7 +157,7 @@ const LessonPage: React.FC = () => {
     };
 
     const handleWordClick = (wordObj: {id: number, text: string}, from: 'available' | 'selected') => {
-        if (isCorrect !== null) return; 
+        if (isCorrect !== null) return;
 
         if (from === 'available') {
             setDragAvailableWords(prev => prev.filter(w => w.id !== wordObj.id));
@@ -231,8 +231,7 @@ const LessonPage: React.FC = () => {
                 return (
                     <div className="w-full max-w-2xl">
                         <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">{currentQuestion.pertanyaan}</h2>
-                        
-                        
+                                                
                         {currentQuestion.tipe_latihan === 'multiple-choice' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {currentQuestion.opsi_jawaban.map(option => (

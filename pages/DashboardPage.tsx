@@ -6,15 +6,15 @@ import { DBTopic, DBUserProgress } from '../types';
 import { CheckCircleIcon, StarIcon } from '../components/icons';
 import { databaseService } from '../services/database';
 
-const VERTICAL_SPACING = 140; 
-const NODE_OFFSET_TOP = 48;  
+const VERTICAL_SPACING = 140;
+const NODE_OFFSET_TOP = 48;
 
 const LessonNode: React.FC<{ lesson: DBTopic; isCompleted: boolean; isUnlocked: boolean; index: number; total: number }> = ({ lesson, isCompleted, isUnlocked, index, total }) => {
   const getPositionStyle = (i: number) => {
     const cycle = i % 4;
     let left = '50%'; 
-    if (cycle === 1) left = '25%'; 
-    if (cycle === 3) left = '75%'; 
+    if (cycle === 1) left = '25%';
+    if (cycle === 3) left = '75%';
     
     return { left, top: `${i * VERTICAL_SPACING}px` };
   };
@@ -113,14 +113,14 @@ const DashboardPage: React.FC = () => {
     let path = `M ${currentX} ${currentY} `;
 
     topics.forEach((_, i) => {
-        if (i === topics.length - 1) return; 
+        if (i === topics.length - 1) return;
 
         const nextIndex = i + 1;
         
         const cycle = nextIndex % 4;
         let nextX = 100;
-        if (cycle === 1) nextX = 50;  
-        if (cycle === 3) nextX = 150; 
+        if (cycle === 1) nextX = 50;
+        if (cycle === 3) nextX = 150;
         
         const nextY = (nextIndex * VERTICAL_SPACING) + NODE_OFFSET_TOP;
 
@@ -193,7 +193,7 @@ const DashboardPage: React.FC = () => {
         })}
       </div>
       
-      <div className="h-24"></div> {/* Bottom spacer */}
+      <div className="h-24"></div>
     </div>
   );
 };

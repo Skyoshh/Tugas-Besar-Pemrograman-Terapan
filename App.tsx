@@ -9,7 +9,7 @@ import DashboardPage from './pages/DashboardPage';
 import LessonPage from './pages/LessonPage';
 import ProfilePage from './pages/ProfilePage';
 import AuthPage from './pages/AuthPage';
-import AdminDashboardPage from './pages/AdminDashboardPage'; // Import Admin Page
+import AdminDashboardPage from './pages/AdminDashboardPage';
 import Header from './components/Header';
 
 const AppContent: React.FC = () => {

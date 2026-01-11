@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useUser } from '../hooks/useUser';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { databaseService } from '../services/database';
-import { DBUser } from '../types';
+import { DBUser, DBTopic, Language } from '../types';
 import { 
     HomeIcon, 
     UserGroupIcon, 
@@ -16,7 +16,6 @@ import {
     XCircleIcon
 } from '../components/icons';
 
-// Sidebar Component
 const Sidebar: React.FC<{ 
     activeTab: 'dashboard' | 'users' | 'courses', 
     setActiveTab: (tab: 'dashboard' | 'users' | 'courses') => void,
@@ -42,7 +41,7 @@ const Sidebar: React.FC<{
                 </button>
                  <button onClick={() => setActiveTab('courses')} className={getLinkClass('courses')}>
                     <BookOpenIcon className="w-5 h-5" />
-                    Manajemen Kursus
+                    Manajemen Topik
                 </button>
             </nav>
 
@@ -76,13 +75,14 @@ const DonutChart: React.FC<{ english: number, mandarin: number }> = ({ english, 
                     <circle 
                         cx={size/2} cy={size/2} r={radius} 
                         fill="transparent" 
-                        stroke="#fef08a" 
+                        stroke="#fef08a"
                         strokeWidth={strokeWidth} 
                     />
                     <circle 
                         cx={size/2} cy={size/2} r={radius} 
                         fill="transparent" 
-                        stroke="#f87171" 
+                        stroke="#f87171"
+                        strokeWidth={strokeWidth}
                         strokeDasharray={circumference}
                         strokeDashoffset={offset}
                         strokeLinecap="round"
@@ -202,7 +202,7 @@ const UserManagementView: React.FC = () => {
             fetchUsers();
             showNotification('Pengguna berhasil dihapus', 'success');
         } catch (e: any) {
-            setIsDeleteModalOpen(false); // Close modal even on error to show toast
+            setIsDeleteModalOpen(false);
             showNotification(e.message, 'error');
         }
     };
@@ -430,6 +430,313 @@ const UserManagementView: React.FC = () => {
     );
 };
 
+const CourseManagementView: React.FC = () => {
+    const [topics, setTopics] = useState<DBTopic[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [activeLang, setActiveLang] = useState<Language>(Language.ENGLISH);
+
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [currentTopic, setCurrentTopic] = useState<DBTopic | null>(null);
+    const [formData, setFormData] = useState({
+        judul_topik: '',
+        deskripsi: '',
+        urutan: 1,
+        xp_reward: 10,
+        icon: '📚'
+    });
+    const [formError, setFormError] = useState('');
+
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [topicToDelete, setTopicToDelete] = useState<DBTopic | null>(null);
+
+    const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+
+    const showNotification = (message: string, type: 'success' | 'error') => {
+        setNotification({ message, type });
+        setTimeout(() => setNotification(null), 3000);
+    };
+
+    const fetchTopics = async () => {
+        setIsLoading(true);
+        try {
+            const data = await databaseService.getTopicsByLanguage(activeLang);
+            setTopics(data);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchTopics();
+    }, [activeLang]);
+
+    const handleOpenAdd = () => {
+        setCurrentTopic(null);
+        const nextOrder = topics.length > 0 ? (Math.max(...topics.map(t => t.urutan)) + 1) : 1;
+        setFormData({
+            judul_topik: '',
+            deskripsi: '',
+            urutan: nextOrder,
+            xp_reward: 10,
+            icon: '📚'
+        });
+        setFormError('');
+        setIsModalOpen(true);
+    };
+
+    const handleOpenEdit = (topic: DBTopic) => {
+        setCurrentTopic(topic);
+        setFormData({
+            judul_topik: topic.judul_topik,
+            deskripsi: topic.deskripsi,
+            urutan: topic.urutan,
+            xp_reward: topic.xp_reward,
+            icon: topic.icon
+        });
+        setFormError('');
+        setIsModalOpen(true);
+    };
+
+    const handleClickDelete = (topic: DBTopic) => {
+        setTopicToDelete(topic);
+        setIsDeleteModalOpen(true);
+    };
+
+    const executeDelete = async () => {
+        if (!topicToDelete) return;
+        try {
+            await databaseService.adminDeleteTopic(topicToDelete.id);
+            setIsDeleteModalOpen(false);
+            setTopicToDelete(null);
+            fetchTopics();
+            showNotification('Topik berhasil dihapus', 'success');
+        } catch (e: any) {
+            setIsDeleteModalOpen(false);
+            showNotification(e.message, 'error');
+        }
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setFormError('');
+
+        try {
+            if (currentTopic) {
+                await databaseService.adminUpdateTopic(currentTopic.id, {
+                    ...formData
+                });
+                showNotification('Topik diperbarui', 'success');
+            } else {
+                await databaseService.adminCreateTopic({
+                    bahasa_id: activeLang,
+                    ...formData
+                });
+                showNotification('Topik baru ditambahkan', 'success');
+            }
+            setIsModalOpen(false);
+            fetchTopics();
+        } catch (e: any) {
+            setFormError(e.message);
+            showNotification('Gagal menyimpan topik', 'error');
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            {notification && (
+                <div className={`fixed top-6 right-6 z-[60] px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 transition-all transform duration-300 animate-slide-up ${notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+                    {notification.type === 'success' ? <CheckCircleIcon className="w-6 h-6" /> : <XCircleIcon className="w-6 h-6" />}
+                    <div>
+                        <p className="font-bold text-sm">{notification.type === 'success' ? 'Berhasil' : 'Gagal'}</p>
+                        <p className="text-sm opacity-90">{notification.message}</p>
+                    </div>
+                    <button onClick={() => setNotification(null)} className="ml-4 opacity-70 hover:opacity-100 p-1">
+                        <span className="text-xl font-bold">&times;</span>
+                    </button>
+                </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <h3 className="text-xl font-bold text-gray-800">Daftar Topik</h3>
+                <div className="flex bg-gray-200 p-1 rounded-lg">
+                    <button 
+                        onClick={() => setActiveLang(Language.ENGLISH)}
+                        className={`px-4 py-1.5 rounded-md text-sm font-bold transition-colors ${activeLang === Language.ENGLISH ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        Inggris 🇬🇧
+                    </button>
+                    <button 
+                         onClick={() => setActiveLang(Language.MANDARIN)}
+                         className={`px-4 py-1.5 rounded-md text-sm font-bold transition-colors ${activeLang === Language.MANDARIN ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        Mandarin 🇨🇳
+                    </button>
+                </div>
+            </div>
+
+            <div className="flex justify-end">
+                <button 
+                    onClick={handleOpenAdd}
+                    className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+                >
+                    <PlusIcon className="w-5 h-5" />
+                    Tambah Topik Baru
+                </button>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-gray-600">
+                        <thead className="bg-gray-50 text-gray-900 font-medium border-b border-gray-200">
+                            <tr>
+                                <th className="px-6 py-4 w-16">Urutan</th>
+                                <th className="px-6 py-4 w-16">Icon</th>
+                                <th className="px-6 py-4">Judul Topik</th>
+                                <th className="px-6 py-4">Deskripsi Singkat</th>
+                                <th className="px-6 py-4 w-24">XP</th>
+                                <th className="px-6 py-4 text-center w-32">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {isLoading ? (
+                                <tr><td colSpan={6} className="p-8 text-center">Memuat...</td></tr>
+                            ) : topics.length === 0 ? (
+                                <tr><td colSpan={6} className="p-8 text-center">Belum ada topik untuk bahasa ini.</td></tr>
+                            ) : (
+                                topics.map(topic => (
+                                    <tr key={topic.id} className="hover:bg-gray-50">
+                                        <td className="px-6 py-3 font-mono font-bold text-gray-400">#{topic.urutan}</td>
+                                        <td className="px-6 py-3 text-2xl">{topic.icon}</td>
+                                        <td className="px-6 py-3 font-bold text-gray-800">{topic.judul_topik}</td>
+                                        <td className="px-6 py-3 text-gray-500 truncate max-w-xs">{topic.deskripsi}</td>
+                                        <td className="px-6 py-3 font-bold text-yellow-600">{topic.xp_reward}</td>
+                                        <td className="px-6 py-3 flex justify-center gap-2">
+                                            <button onClick={() => handleOpenEdit(topic)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit Topik">
+                                                <PencilSquareIcon className="w-5 h-5"/>
+                                            </button>
+                                            <button onClick={() => handleClickDelete(topic)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Hapus Topik">
+                                                <TrashIcon className="w-5 h-5"/>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {isModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-slide-up">
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <h3 className="text-lg font-bold text-gray-800">
+                                {currentTopic ? 'Edit Topik' : `Tambah Topik (${activeLang === Language.ENGLISH ? 'Inggris' : 'Mandarin'})`}
+                            </h3>
+                            <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <span className="text-2xl">&times;</span>
+                            </button>
+                        </div>
+                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                            {formError && (
+                                <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200">
+                                    {formError}
+                                </div>
+                            )}
+                            <div className="grid grid-cols-4 gap-4">
+                                <div className="col-span-3">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Judul Topik</label>
+                                    <input 
+                                        type="text" required 
+                                        className="w-full px-4 py-2 border rounded-lg focus:ring-green-500 focus:border-green-500"
+                                        value={formData.judul_topik}
+                                        onChange={e => setFormData({...formData, judul_topik: e.target.value})}
+                                        placeholder="Misal: Perkenalan"
+                                    />
+                                </div>
+                                <div className="col-span-1">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Icon (Emoji)</label>
+                                    <input 
+                                        type="text" required maxLength={4}
+                                        className="w-full px-4 py-2 border rounded-lg focus:ring-green-500 focus:border-green-500 text-center text-xl"
+                                        value={formData.icon}
+                                        onChange={e => setFormData({...formData, icon: e.target.value})}
+                                        placeholder="👋"
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi Singkat</label>
+                                <textarea 
+                                    required rows={2}
+                                    className="w-full px-4 py-2 border rounded-lg focus:ring-green-500 focus:border-green-500"
+                                    value={formData.deskripsi}
+                                    onChange={e => setFormData({...formData, deskripsi: e.target.value})}
+                                    placeholder="Apa yang akan dipelajari?"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Urutan</label>
+                                    <input 
+                                        type="number" required min={1}
+                                        className="w-full px-4 py-2 border rounded-lg focus:ring-green-500 focus:border-green-500"
+                                        value={formData.urutan}
+                                        onChange={e => setFormData({...formData, urutan: parseInt(e.target.value)})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">XP Reward</label>
+                                    <input 
+                                        type="number" required min={1}
+                                        className="w-full px-4 py-2 border rounded-lg focus:ring-green-500 focus:border-green-500"
+                                        value={formData.xp_reward}
+                                        onChange={e => setFormData({...formData, xp_reward: parseInt(e.target.value)})}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="pt-4 flex justify-end gap-3">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg">Batal</button>
+                                <button type="submit" className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700">Simpan</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {isDeleteModalOpen && topicToDelete && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-slide-up">
+                         <div className="p-6 text-center">
+                            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <TrashIcon className="w-8 h-8 text-red-600" />
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-2">Hapus Topik?</h3>
+                            <p className="text-gray-500 text-sm mb-6">
+                                Apakah Anda yakin ingin menghapus topik <span className="font-bold text-gray-800">"{topicToDelete.judul_topik}"</span>?
+                                <br/><br/>
+                                <span className="text-red-500 text-xs">
+                                    Catatan: Topik tidak dapat dihapus jika sudah memiliki Latihan, Kosakata, atau Riwayat Pengerjaan siswa.
+                                </span>
+                            </p>
+                            
+                            <div className="flex gap-3 justify-center">
+                                <button onClick={() => setIsDeleteModalOpen(false)} className="px-5 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200">Batal</button>
+                                <button onClick={executeDelete} className="px-5 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 shadow-md">Ya, Hapus</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const DashboardOverview: React.FC<{ 
     stats: { totalUsers: number, totalEnglishTopics: number, totalMandarinTopics: number },
     recentUsers: DBUser[],
@@ -591,7 +898,7 @@ const AdminDashboardPage: React.FC = () => {
             <h2 className="text-xl font-bold text-gray-800 capitalize">
                 {activeTab === 'dashboard' && 'Overview'}
                 {activeTab === 'users' && 'Manajemen Pengguna'}
-                {activeTab === 'courses' && 'Manajemen Kursus'}
+                {activeTab === 'courses' && 'Manajemen Topik'}
             </h2>
             <div className="flex items-center gap-4">
                 <div className="text-right hidden sm:block">
@@ -614,10 +921,7 @@ const AdminDashboardPage: React.FC = () => {
             )}
 
             {activeTab === 'courses' && (
-                <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                    <BookOpenIcon className="w-16 h-16 mb-4 opacity-50"/>
-                    <h3 className="text-xl font-medium">Fitur Manajemen Kursus Segera Hadir</h3>
-                </div>
+                <CourseManagementView />
             )}
         </main>
       </div>

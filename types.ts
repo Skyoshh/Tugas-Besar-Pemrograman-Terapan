@@ -7,18 +7,18 @@ export enum Language {
 export interface DBUser {
   id: string; 
   nama_lengkap: string;
-  email: string; 
-  password?: string; 
+  email: string;
+  password?: string;
   total_xp: number;
   level: number;
   daily_streak: number;
-  last_login: string; 
+  last_login: string;
   learning_language: Language | null;
-  role?: 'user' | 'admin'; 
+  role?: 'user' | 'admin';
 }
 
 export interface DBLanguage {
-  id: string; 
+  id: string; // 'ENGLISH' | 'MANDARIN'
   nama_bahasa: string;
 }
 
@@ -37,7 +37,7 @@ export interface DBVocabulary {
   topik_id: string;
   indonesian: string;
   target_word: string; 
-  pinyin?: string; 
+  pinyin?: string;
 }
 
 export interface DBExercise {
@@ -46,7 +46,7 @@ export interface DBExercise {
   tipe_latihan: 'multiple-choice' | 'fill-in-the-blank' | 'drag-and-drop';
   pertanyaan: string;
   jawaban_benar: string;
-  opsi_jawaban: string[]; 
+  opsi_jawaban: string[];
 }
 
 export interface DBUserProgress {
