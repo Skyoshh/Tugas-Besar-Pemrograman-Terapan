@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useUser } from '../hooks/useUser';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { databaseService } from '../services/database';
-import { DBUser, DBTopic, Language } from '../types';
+import { DBUser, DBTopic, DBVocabulary, Language } from '../types';
 import { 
     HomeIcon, 
     UserGroupIcon, 
@@ -13,9 +13,13 @@ import {
     PencilSquareIcon,
     TrashIcon,
     CheckCircleIcon,
-    XCircleIcon
+    XCircleIcon,
+    ListBulletIcon
 } from '../components/icons';
 
+// --- SUB-COMPONENTS ---
+
+// 1. Sidebar Component
 const Sidebar: React.FC<{ 
     activeTab: 'dashboard' | 'users' | 'courses', 
     setActiveTab: (tab: 'dashboard' | 'users' | 'courses') => void,
@@ -58,6 +62,7 @@ const Sidebar: React.FC<{
     );
 };
 
+// 2. SVG Donut Chart Component
 const DonutChart: React.FC<{ english: number, mandarin: number }> = ({ english, mandarin }) => {
     const total = english + mandarin || 1;
     const englishPercentage = (english / total) * 100;
@@ -72,16 +77,18 @@ const DonutChart: React.FC<{ english: number, mandarin: number }> = ({ english, 
         <div className="flex flex-col items-center">
             <div className="relative w-40 h-40">
                 <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="rotate-[-90deg]">
+                    {/* Background Circle (Mandarin/Sisa) */}
                     <circle 
                         cx={size/2} cy={size/2} r={radius} 
                         fill="transparent" 
-                        stroke="#fef08a"
+                        stroke="#fef08a" // yellow-200
                         strokeWidth={strokeWidth} 
                     />
+                    {}
                     <circle 
                         cx={size/2} cy={size/2} r={radius} 
                         fill="transparent" 
-                        stroke="#f87171"
+                        stroke="#f87171" // red-400 (using red for English as in previous flag logic or switch to blue) - Let's use Red for UK, Yellow for China based on flags
                         strokeWidth={strokeWidth}
                         strokeDasharray={circumference}
                         strokeDashoffset={offset}
@@ -113,6 +120,7 @@ const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
     
+    // Reset hours to get pure day difference
     const d1 = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const d2 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
@@ -130,21 +138,290 @@ const getUserStatus = (user: DBUser) => {
     if (user.role === 'admin') {
         return { label: 'Admin', color: 'bg-gray-800 text-white' };
     }
+    // Default semua non-admin menjadi 'User'
     return { label: 'User', color: 'bg-green-100 text-green-700' };
 };
 
+// --- VOCABULARY MANAGEMENT MODAL ---
+const VocabularyManagerModal: React.FC<{
+    topic: DBTopic;
+    onClose: () => void;
+}> = ({ topic, onClose }) => {
+    const [vocabList, setVocabList] = useState<DBVocabulary[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [editMode, setEditMode] = useState<number | string | null>(null);
+    const [formData, setFormData] = useState({ indonesian: '', target_word: '', pinyin: '' });
+    
+    // Notification State
+    const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+    
+    // Delete Confirmation State
+    const [vocabToDelete, setVocabToDelete] = useState<DBVocabulary | null>(null);
+
+    const isMandarin = topic.bahasa_id === Language.MANDARIN;
+
+    const showNotification = (message: string, type: 'success' | 'error') => {
+        setNotification({ message, type });
+        setTimeout(() => setNotification(null), 3000);
+    };
+
+    const fetchVocab = async () => {
+        setLoading(true);
+        try {
+            const data = await databaseService.adminGetVocabulary(topic.id);
+            setVocabList(data);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchVocab();
+    }, [topic]);
+
+    const handleEdit = (vocab: DBVocabulary) => {
+        setEditMode(vocab.id || null);
+        setFormData({ 
+            indonesian: vocab.indonesian, 
+            target_word: vocab.target_word, 
+            pinyin: vocab.pinyin || '' 
+        });
+    };
+
+    const handleCancelEdit = () => {
+        setEditMode(null);
+        setFormData({ indonesian: '', target_word: '', pinyin: '' });
+    };
+
+    // Open Delete Confirmation
+    const handleDeleteClick = (vocab: DBVocabulary) => {
+        setVocabToDelete(vocab);
+    };
+
+    // Execute Delete
+    const executeDelete = async () => {
+        if (!vocabToDelete || !vocabToDelete.id) return;
+        
+        try {
+            await databaseService.adminDeleteVocabulary(vocabToDelete.id);
+            showNotification('Kosakata berhasil dihapus', 'success');
+            setVocabToDelete(null);
+            fetchVocab();
+        } catch (e: any) {
+            showNotification(e.message || 'Gagal menghapus kosakata', 'error');
+            setVocabToDelete(null);
+        }
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            if (editMode) {
+                await databaseService.adminUpdateVocabulary(editMode, {
+                    ...formData,
+                    topik_id: topic.id
+                });
+                showNotification('Kosakata berhasil diperbarui', 'success');
+            } else {
+                await databaseService.adminCreateVocabulary({
+                    topik_id: topic.id,
+                    ...formData
+                });
+                showNotification('Kosakata baru berhasil ditambahkan', 'success');
+            }
+            handleCancelEdit();
+            fetchVocab();
+        } catch (e: any) {
+            showNotification(e.message || 'Terjadi kesalahan', 'error');
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden animate-slide-up relative">
+                
+                {}
+                {notification && (
+                    <div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 animate-slide-up ${notification.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
+                        {notification.type === 'success' ? <CheckCircleIcon className="w-5 h-5"/> : <XCircleIcon className="w-5 h-5"/>}
+                        <span className="text-sm font-bold">{notification.message}</span>
+                    </div>
+                )}
+
+                {}
+                {vocabToDelete && (
+                    <div className="absolute inset-0 z-[70] bg-white/90 backdrop-blur-sm flex items-center justify-center p-4 transition-all">
+                        <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-2xl max-w-sm w-full text-center transform scale-100 animate-fade-in">
+                            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <TrashIcon className="w-6 h-6 text-red-600" />
+                            </div>
+                            <h4 className="text-lg font-bold text-gray-800 mb-1">Hapus Kosakata?</h4>
+                            <p className="text-sm text-gray-500 mb-4">
+                                Apakah Anda yakin ingin menghapus <span className="font-bold text-gray-800">"{vocabToDelete.indonesian}"</span>? Tindakan ini tidak dapat dibatalkan.
+                            </p>
+                            <div className="flex gap-2 justify-center">
+                                <button 
+                                    onClick={() => setVocabToDelete(null)}
+                                    className="px-4 py-2 bg-gray-100 text-gray-700 font-bold rounded-lg hover:bg-gray-200"
+                                >
+                                    Batal
+                                </button>
+                                <button 
+                                    onClick={executeDelete}
+                                    className="px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 shadow-md"
+                                >
+                                    Ya, Hapus
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {}
+                <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                    <div>
+                        <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                             <BookOpenIcon className="w-6 h-6 text-green-600"/>
+                             Manajemen Kosakata
+                        </h3>
+                        <p className="text-sm text-gray-500 mt-1">Topik: <span className="font-bold text-gray-700">{topic.judul_topik}</span></p>
+                    </div>
+                    <button onClick={onClose} className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors">
+                        <span className="text-2xl leading-none">&times;</span>
+                    </button>
+                </div>
+
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                    {}
+                    <div className="w-full md:w-1/3 bg-gray-50 p-6 border-r border-gray-200 overflow-y-auto">
+                        <h4 className="font-bold text-gray-700 mb-4">{editMode ? 'Edit Kosakata' : 'Tambah Kosakata Baru'}</h4>
+                        
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bahasa Indonesia</label>
+                                <input 
+                                    type="text" required
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-green-500 focus:border-green-500"
+                                    placeholder="Contoh: Selamat Pagi"
+                                    value={formData.indonesian}
+                                    onChange={e => setFormData({...formData, indonesian: e.target.value})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                                    {isMandarin ? 'Hanzi (Karakter)' : 'Bahasa Inggris'}
+                                </label>
+                                <input 
+                                    type="text" required
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-green-500 focus:border-green-500"
+                                    placeholder={isMandarin ? "你好" : "Good Morning"}
+                                    value={formData.target_word}
+                                    onChange={e => setFormData({...formData, target_word: e.target.value})}
+                                />
+                            </div>
+                            {isMandarin && (
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pinyin</label>
+                                    <input 
+                                        type="text" required
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-green-500 focus:border-green-500"
+                                        placeholder="nǐ hǎo"
+                                        value={formData.pinyin}
+                                        onChange={e => setFormData({...formData, pinyin: e.target.value})}
+                                    />
+                                </div>
+                            )}
+                            
+                            <div className="pt-4 flex gap-2">
+                                {editMode && (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleCancelEdit}
+                                        className="flex-1 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300"
+                                    >
+                                        Batal
+                                    </button>
+                                )}
+                                <button 
+                                    type="submit" 
+                                    className="flex-1 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700"
+                                >
+                                    {editMode ? 'Simpan' : 'Tambah'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {}
+                    <div className="flex-1 bg-white p-6 overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h4 className="font-bold text-gray-700">Daftar Kosakata ({vocabList.length})</h4>
+                        </div>
+                        
+                        {loading ? (
+                            <p className="text-center text-gray-400 py-10">Memuat...</p>
+                        ) : vocabList.length === 0 ? (
+                            <div className="text-center py-10 border-2 border-dashed border-gray-200 rounded-xl">
+                                <p className="text-gray-400">Belum ada kosakata.</p>
+                                <p className="text-sm text-gray-400">Gunakan formulir di kiri untuk menambah.</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-hidden border border-gray-200 rounded-lg">
+                                <table className="w-full text-left text-sm text-gray-600">
+                                    <thead className="bg-gray-100 text-gray-700 font-semibold">
+                                        <tr>
+                                            <th className="px-4 py-3">Indonesia</th>
+                                            <th className="px-4 py-3">{isMandarin ? 'Hanzi' : 'Inggris'}</th>
+                                            {isMandarin && <th className="px-4 py-3">Pinyin</th>}
+                                            <th className="px-4 py-3 text-center">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {vocabList.map(v => (
+                                            <tr key={v.id} className="hover:bg-gray-50 group">
+                                                <td className="px-4 py-3 font-medium text-gray-800">{v.indonesian}</td>
+                                                <td className="px-4 py-3 text-green-700 font-bold">{v.target_word}</td>
+                                                {isMandarin && <td className="px-4 py-3 text-gray-500 font-mono">{v.pinyin}</td>}
+                                                <td className="px-4 py-3 flex justify-center gap-2">
+                                                    <button onClick={() => handleEdit(v)} className="text-blue-500 hover:text-blue-700 p-1">
+                                                        <PencilSquareIcon className="w-4 h-4"/>
+                                                    </button>
+                                                    <button onClick={() => handleDeleteClick(v)} className="text-red-500 hover:text-red-700 p-1">
+                                                        <TrashIcon className="w-4 h-4"/>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// --- USER MANAGEMENT VIEW (CRUD) ---
 const UserManagementView: React.FC = () => {
     const [users, setUsers] = useState<DBUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     
+    // Form Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentUser, setCurrentUser] = useState<Partial<DBUser> | null>(null);
     const [formData, setFormData] = useState({ nama_lengkap: '', email: '', role: 'user', password: '' });
     const [formError, setFormError] = useState('');
 
+    // Delete Modal State
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [userToDelete, setUserToDelete] = useState<DBUser | null>(null);
     
+    // Notification State
     const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
     const showNotification = (message: string, type: 'success' | 'error') => {
@@ -181,17 +458,19 @@ const UserManagementView: React.FC = () => {
             nama_lengkap: user.nama_lengkap, 
             email: user.email, 
             role: user.role || 'user', 
-            password: '' 
+            password: ''
         });
         setFormError('');
         setIsModalOpen(true);
     };
 
+    // Open Confirmation Modal
     const handleClickDelete = (user: DBUser) => {
         setUserToDelete(user);
         setIsDeleteModalOpen(true);
     };
 
+    // Execute Delete
     const executeDelete = async () => {
         if (!userToDelete) return;
         
@@ -213,6 +492,7 @@ const UserManagementView: React.FC = () => {
         
         try {
             if (currentUser && currentUser.id) {
+                // Update
                 await databaseService.updateUser(currentUser.id, {
                     nama_lengkap: formData.nama_lengkap,
                     email: formData.email,
@@ -221,6 +501,7 @@ const UserManagementView: React.FC = () => {
                 });
                 showNotification('Data pengguna berhasil diperbarui', 'success');
             } else {
+                // Create
                 if (!formData.password) {
                     setFormError('Password wajib diisi untuk pengguna baru.');
                     return;
@@ -243,6 +524,7 @@ const UserManagementView: React.FC = () => {
 
     return (
         <div className="space-y-6">
+            {}
             {notification && (
                 <div className={`fixed top-6 right-6 z-[60] px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 transition-all transform duration-300 animate-slide-up ${notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
                     {notification.type === 'success' ? <CheckCircleIcon className="w-6 h-6" /> : <XCircleIcon className="w-6 h-6" />}
@@ -311,6 +593,7 @@ const UserManagementView: React.FC = () => {
                 </div>
             </div>
 
+            {}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-slide-up">
@@ -392,6 +675,7 @@ const UserManagementView: React.FC = () => {
                 </div>
             )}
 
+            {}
             {isDeleteModalOpen && userToDelete && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-slide-up transform transition-all">
@@ -430,11 +714,13 @@ const UserManagementView: React.FC = () => {
     );
 };
 
+// --- COURSE MANAGEMENT VIEW (CRUD) ---
 const CourseManagementView: React.FC = () => {
     const [topics, setTopics] = useState<DBTopic[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeLang, setActiveLang] = useState<Language>(Language.ENGLISH);
 
+    // Form Modal
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentTopic, setCurrentTopic] = useState<DBTopic | null>(null);
     const [formData, setFormData] = useState({
@@ -446,9 +732,14 @@ const CourseManagementView: React.FC = () => {
     });
     const [formError, setFormError] = useState('');
 
+    // Vocab Modal State
+    const [selectedTopicForVocab, setSelectedTopicForVocab] = useState<DBTopic | null>(null);
+
+    // Delete Modal
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [topicToDelete, setTopicToDelete] = useState<DBTopic | null>(null);
 
+    // Notification
     const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
     const showNotification = (message: string, type: 'success' | 'error') => {
@@ -524,11 +815,13 @@ const CourseManagementView: React.FC = () => {
 
         try {
             if (currentTopic) {
+                // Update
                 await databaseService.adminUpdateTopic(currentTopic.id, {
                     ...formData
                 });
                 showNotification('Topik diperbarui', 'success');
             } else {
+                // Create
                 await databaseService.adminCreateTopic({
                     bahasa_id: activeLang,
                     ...formData
@@ -596,7 +889,7 @@ const CourseManagementView: React.FC = () => {
                                 <th className="px-6 py-4">Judul Topik</th>
                                 <th className="px-6 py-4">Deskripsi Singkat</th>
                                 <th className="px-6 py-4 w-24">XP</th>
-                                <th className="px-6 py-4 text-center w-32">Aksi</th>
+                                <th className="px-6 py-4 text-center w-40">Aksi</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -613,6 +906,9 @@ const CourseManagementView: React.FC = () => {
                                         <td className="px-6 py-3 text-gray-500 truncate max-w-xs">{topic.deskripsi}</td>
                                         <td className="px-6 py-3 font-bold text-yellow-600">{topic.xp_reward}</td>
                                         <td className="px-6 py-3 flex justify-center gap-2">
+                                            <button onClick={() => setSelectedTopicForVocab(topic)} className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg" title="Kelola Kosakata">
+                                                <ListBulletIcon className="w-5 h-5"/>
+                                            </button>
                                             <button onClick={() => handleOpenEdit(topic)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit Topik">
                                                 <PencilSquareIcon className="w-5 h-5"/>
                                             </button>
@@ -628,6 +924,7 @@ const CourseManagementView: React.FC = () => {
                 </div>
             </div>
 
+            {}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-slide-up">
@@ -709,6 +1006,15 @@ const CourseManagementView: React.FC = () => {
                 </div>
             )}
 
+            {}
+            {selectedTopicForVocab && (
+                <VocabularyManagerModal 
+                    topic={selectedTopicForVocab} 
+                    onClose={() => setSelectedTopicForVocab(null)} 
+                />
+            )}
+
+            {}
             {isDeleteModalOpen && topicToDelete && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-slide-up">
@@ -737,6 +1043,7 @@ const CourseManagementView: React.FC = () => {
     );
 };
 
+// --- DASHBOARD VIEW ---
 const DashboardOverview: React.FC<{ 
     stats: { totalUsers: number, totalEnglishTopics: number, totalMandarinTopics: number },
     recentUsers: DBUser[],
@@ -744,6 +1051,7 @@ const DashboardOverview: React.FC<{
 }> = ({ stats, recentUsers, loadingData }) => {
     return (
         <div className="space-y-8 animate-fade-in">
+             {}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
                     <div>
@@ -776,8 +1084,10 @@ const DashboardOverview: React.FC<{
                 </div>
             </div>
 
+            {}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
+                {}
                 <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                     <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
                         <h3 className="font-bold text-gray-800">Aktivitas Terbaru</h3>
@@ -828,6 +1138,7 @@ const DashboardOverview: React.FC<{
                     </div>
                 </div>
 
+                {}
                 <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm h-fit">
                     <h3 className="font-bold text-gray-800 mb-6 text-center">Distribusi Konten</h3>
                     <DonutChart 
@@ -840,6 +1151,7 @@ const DashboardOverview: React.FC<{
     );
 }
 
+// --- MAIN PAGE ---
 
 const AdminDashboardPage: React.FC = () => {
   const { user, isLoading, logout } = useUser();
@@ -890,10 +1202,13 @@ const AdminDashboardPage: React.FC = () => {
 
   return (
     <div className="flex min-h-screen bg-gray-50 font-sans">
+      {}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
 
+      {}
       <div className="flex-1 ml-64 flex flex-col">
         
+        {}
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 sticky top-0 z-10 shadow-sm">
             <h2 className="text-xl font-bold text-gray-800 capitalize">
                 {activeTab === 'dashboard' && 'Overview'}
@@ -911,6 +1226,7 @@ const AdminDashboardPage: React.FC = () => {
             </div>
         </header>
 
+        {}
         <main className="flex-1 p-8 overflow-y-auto">
             {activeTab === 'dashboard' && (
                 <DashboardOverview stats={stats} recentUsers={recentUsers} loadingData={loadingData} />

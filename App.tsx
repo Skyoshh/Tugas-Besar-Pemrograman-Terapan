@@ -9,13 +9,13 @@ import DashboardPage from './pages/DashboardPage';
 import LessonPage from './pages/LessonPage';
 import ProfilePage from './pages/ProfilePage';
 import AuthPage from './pages/AuthPage';
-import AdminDashboardPage from './pages/AdminDashboardPage';
+import AdminDashboardPage from './pages/AdminDashboardPage'; // Import Admin Page
 import Header from './components/Header';
 
 const AppContent: React.FC = () => {
     const location = useLocation();
     const noHeaderPaths = ['/', '/select-language', '/auth'];
-    
+
     const showHeader = 
         !noHeaderPaths.includes(location.pathname) && 
         !location.pathname.startsWith('/lesson/') &&

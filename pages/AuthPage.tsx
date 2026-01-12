@@ -22,11 +22,13 @@ const AuthPage: React.FC = () => {
   
   useEffect(() => {
     if (user) {
+        // PRIORITAS 1: Cek apakah user adalah Admin
         if (user.role === 'admin') {
             navigate('/admin');
             return;
         }
 
+        // PRIORITAS 2: Cek apakah user biasa sudah pilih bahasa
         if(user.learning_language) {
             navigate('/dashboard');
         } else {

@@ -64,10 +64,12 @@ const LessonPage: React.FC = () => {
             if (!lessonId || !user?.learning_language) return;
             setLoading(true);
             try {
+                // Fetch topic detail to get XP reward
                 const allTopics = await databaseService.getTopicsByLanguage(user.learning_language);
                 const topic = allTopics.find(t => t.id === lessonId);
                 setCurrentTopic(topic || null);
 
+                // Fetch lesson content
                 const data = await databaseService.getLessonData(lessonId);
                 setLessonData(data);
             } catch (error) {
@@ -94,6 +96,7 @@ const LessonPage: React.FC = () => {
         setStep(LessonStep.QUIZ);
     }
 
+    // Reset state saat berganti soal
     const currentQuestion = lessonData?.exercises[currentQuizIndex];
     useEffect(() => {
         if (currentQuestion) {
@@ -127,14 +130,17 @@ const LessonPage: React.FC = () => {
 
         if (currentQuestion.tipe_latihan === 'drag-and-drop') {
             const userAnswer = dragSelectedWords.map(w => w.text).join(' ');
+            // Normalisasi spasi dan case
             isAnswerCorrect = userAnswer.trim().toLowerCase() === currentQuestion.jawaban_benar.trim().toLowerCase();
         } else {
             if (selectedAnswer === null) return;
             isAnswerCorrect = selectedAnswer.trim().toLowerCase() === currentQuestion.jawaban_benar.toLowerCase();
         }
         
+        // Simpan state lokal untuk UI
         setIsCorrect(isAnswerCorrect);
         
+        // Hitung jumlah benar yang BARU (karena state correctAnswers belum update di siklus ini)
         const newCorrectCount = isAnswerCorrect ? correctAnswers + 1 : correctAnswers;
 
         if(isAnswerCorrect) setCorrectAnswers(prev => prev + 1);
@@ -145,7 +151,9 @@ const LessonPage: React.FC = () => {
             if (lessonData && currentQuizIndex < lessonData.exercises.length - 1) {
                 setCurrentQuizIndex(prev => prev + 1);
             } else {
+                // Kuis Selesai
                 const totalQuestions = lessonData.exercises.length;
+                // Hitung Skor (0 - 100)
                 const finalScore = totalQuestions > 0 
                     ? Math.round((newCorrectCount / totalQuestions) * 100) 
                     : 100;
@@ -231,7 +239,9 @@ const LessonPage: React.FC = () => {
                 return (
                     <div className="w-full max-w-2xl">
                         <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">{currentQuestion.pertanyaan}</h2>
-                                                
+                        
+                        {}
+                        
                         {currentQuestion.tipe_latihan === 'multiple-choice' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {currentQuestion.opsi_jawaban.map(option => (
@@ -267,6 +277,7 @@ const LessonPage: React.FC = () => {
 
                         {currentQuestion.tipe_latihan === 'drag-and-drop' && (
                             <div className="space-y-8">
+                                {}
                                 <div className="min-h-[80px] p-2 border-b-2 border-gray-200 flex flex-wrap gap-2 items-center justify-center transition-colors">
                                     {dragSelectedWords.length === 0 && (
                                         <span className="text-gray-400 text-sm select-none">Ketuk kata untuk menyusun kalimat</span>
@@ -283,6 +294,7 @@ const LessonPage: React.FC = () => {
                                     ))}
                                 </div>
 
+                                {}
                                 <div className="flex flex-wrap gap-3 justify-center">
                                     {dragAvailableWords.map((word) => (
                                         <button
@@ -294,6 +306,7 @@ const LessonPage: React.FC = () => {
                                             {word.text}
                                         </button>
                                     ))}
+                                    {}
                                     {dragAvailableWords.length === 0 && (
                                          <div className="h-10 w-full"></div>
                                     )}

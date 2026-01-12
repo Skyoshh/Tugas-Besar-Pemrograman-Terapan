@@ -6,13 +6,15 @@ import { DBTopic, DBUserProgress } from '../types';
 import { CheckCircleIcon, StarIcon } from '../components/icons';
 import { databaseService } from '../services/database';
 
+// KONSTANTA LAYOUT
 const VERTICAL_SPACING = 140;
 const NODE_OFFSET_TOP = 48;
 
 const LessonNode: React.FC<{ lesson: DBTopic; isCompleted: boolean; isUnlocked: boolean; index: number; total: number }> = ({ lesson, isCompleted, isUnlocked, index, total }) => {
+  // Logic untuk posisi zig-zag yang sinkron dengan SVG
   const getPositionStyle = (i: number) => {
     const cycle = i % 4;
-    let left = '50%'; 
+    let left = '50%';
     if (cycle === 1) left = '25%';
     if (cycle === 3) left = '75%';
     
@@ -33,6 +35,7 @@ const LessonNode: React.FC<{ lesson: DBTopic; isCompleted: boolean; isUnlocked: 
         `}>
           <div className="text-4xl drop-shadow-md select-none">{lesson.icon}</div>
           
+          {}
           {isCompleted && (
              <div className="absolute -top-2 -right-2 bg-yellow-400 rounded-full p-1 border-2 border-white shadow-sm">
                 <CheckCircleIcon className="w-6 h-6 text-white" />
@@ -107,8 +110,9 @@ const DashboardPage: React.FC = () => {
   const generatePath = () => {
     if (topics.length === 0) return "";
     
+    // Tentukan titik awal (Topik pertama selalu di tengah/100)
     let currentX = 100;
-    let currentY = NODE_OFFSET_TOP; 
+    let currentY = NODE_OFFSET_TOP; // Titik tengah lingkaran pertama
 
     let path = `M ${currentX} ${currentY} `;
 
@@ -120,13 +124,15 @@ const DashboardPage: React.FC = () => {
         const cycle = nextIndex % 4;
         let nextX = 100;
         if (cycle === 1) nextX = 50;
-        if (cycle === 3) nextX = 150;
+        if (cycle === 3) nextX = 150; 
         
+        // Tentukan posisi Y target berikutnya
         const nextY = (nextIndex * VERTICAL_SPACING) + NODE_OFFSET_TOP;
 
         const c1x = currentX;
         const c1y = currentY + (VERTICAL_SPACING / 2);
 
+        // Control point 2: Naik ke atas dari titik target
         const c2x = nextX;
         const c2y = nextY - (VERTICAL_SPACING / 2);
 
@@ -152,13 +158,17 @@ const DashboardPage: React.FC = () => {
         </p>
       </div>
 
+      {}
       <div className="relative w-full max-w-md mx-auto" style={{ height: `${containerHeight}px` }}>
         
+        {}
+        {}
         <svg 
             className="absolute top-0 left-0 w-full h-full z-0 overflow-visible"
             viewBox={`0 0 200 ${containerHeight}`} 
             preserveAspectRatio="none" 
         >
+          {}
           <path 
             d={pathD} 
             stroke="#e5e7eb" 
@@ -167,6 +177,7 @@ const DashboardPage: React.FC = () => {
             strokeLinecap="round"
             strokeLinejoin="round"
           />
+          {}
            <path 
             d={pathD} 
             stroke="#fbbf24" 
@@ -177,6 +188,7 @@ const DashboardPage: React.FC = () => {
           />
         </svg>
 
+        {}
         {topics.map((lesson, index) => {
           const isCompleted = completedLessonIds.includes(lesson.id);
           const isUnlocked = index === 0 || completedLessonIds.includes(topics[index-1]?.id);
@@ -193,7 +205,7 @@ const DashboardPage: React.FC = () => {
         })}
       </div>
       
-      <div className="h-24"></div>
+      <div className="h-24"></div> {/* Bottom spacer */}
     </div>
   );
 };

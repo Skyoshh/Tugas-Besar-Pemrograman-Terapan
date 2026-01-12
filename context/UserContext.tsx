@@ -99,8 +99,10 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // Update: Menerima parameter score
   const completeLesson = async (lessonId: string, xp: number, score: number) => {
     if (!user || !user.id) return;
+    // Mengirim skor dinamis ke database service
     await databaseService.saveLessonProgress(user.id, lessonId, score);
     await databaseService.updateUserStats(user.id, xp);
     await refreshUser();
