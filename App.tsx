@@ -15,7 +15,11 @@ import Header from './components/Header';
 const AppContent: React.FC = () => {
     const location = useLocation();
     const noHeaderPaths = ['/', '/select-language', '/auth'];
-
+    
+    // Header tidak muncul di:
+    // 1. Path yang ada di noHeaderPaths
+    // 2. Halaman Lesson (Latihan)
+    // 3. Halaman Admin (Karena pakai Sidebar)
     const showHeader = 
         !noHeaderPaths.includes(location.pathname) && 
         !location.pathname.startsWith('/lesson/') &&

@@ -24,11 +24,14 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Init session via localStorage email (Simple persistence)
   useEffect(() => {
     const initSession = async () => {
       await databaseService.init(); 
       const email = window.localStorage.getItem('userEmail');
       if (email) {
+        // Note: For real security, we should store a token, not just email.
+        // But for this prototype structure, we re-fetch user by email.
         const dbUser = await databaseService.getUserByEmail(email);
         if (dbUser) setUser(dbUser);
       }

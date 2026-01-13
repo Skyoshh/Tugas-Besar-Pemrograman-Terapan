@@ -7,16 +7,16 @@ import { CheckCircleIcon, StarIcon } from '../components/icons';
 import { databaseService } from '../services/database';
 
 // KONSTANTA LAYOUT
-const VERTICAL_SPACING = 140;
-const NODE_OFFSET_TOP = 48;
+const VERTICAL_SPACING = 140; // Jarak vertikal antar node
+const NODE_OFFSET_TOP = 48;   // Titik tengah vertikal lingkaran (Setengah dari h-24 / 96px = 48px)
 
 const LessonNode: React.FC<{ lesson: DBTopic; isCompleted: boolean; isUnlocked: boolean; index: number; total: number }> = ({ lesson, isCompleted, isUnlocked, index, total }) => {
   // Logic untuk posisi zig-zag yang sinkron dengan SVG
   const getPositionStyle = (i: number) => {
     const cycle = i % 4;
-    let left = '50%';
-    if (cycle === 1) left = '25%';
-    if (cycle === 3) left = '75%';
+    let left = '50%'; // Center (Cycle 0 & 2)
+    if (cycle === 1) left = '25%'; // Kiri
+    if (cycle === 3) left = '75%'; // Kanan
     
     return { left, top: `${i * VERTICAL_SPACING}px` };
   };
@@ -35,7 +35,7 @@ const LessonNode: React.FC<{ lesson: DBTopic; isCompleted: boolean; isUnlocked: 
         `}>
           <div className="text-4xl drop-shadow-md select-none">{lesson.icon}</div>
           
-          {}
+          {/* Progress Ring / Checkmark */}
           {isCompleted && (
              <div className="absolute -top-2 -right-2 bg-yellow-400 rounded-full p-1 border-2 border-white shadow-sm">
                 <CheckCircleIcon className="w-6 h-6 text-white" />
@@ -97,6 +97,7 @@ const DashboardPage: React.FC = () => {
   if (isLoading) return <div className="p-8 text-center">Memuat Pengguna...</div>;
   if (!user) return <Navigate to="/auth" />;
   
+  // REDIRECT ADMIN: Admin tidak boleh di halaman belajar user biasa
   if (user.role === 'admin') {
       return <Navigate to="/admin" />;
   }
@@ -107,8 +108,13 @@ const DashboardPage: React.FC = () => {
 
   if (loadingData) return <div className="p-8 text-center">Menyiapkan kurikulum...</div>;
 
+  // Generate SVG Path dynamically based on number of topics
+  // Pindahkan logika path ke bawah setelah check data
   const generatePath = () => {
     if (topics.length === 0) return "";
+    
+    // Kita menggunakan koordinat SVG tetap: Lebar 200 unit.
+    // Center = 100, Kiri = 50, Kanan = 150.
     
     // Tentukan titik awal (Topik pertama selalu di tengah/100)
     let currentX = 100;
@@ -117,18 +123,21 @@ const DashboardPage: React.FC = () => {
     let path = `M ${currentX} ${currentY} `;
 
     topics.forEach((_, i) => {
-        if (i === topics.length - 1) return;
+        if (i === topics.length - 1) return; // Stop drawing after reaching last node
 
         const nextIndex = i + 1;
         
+        // Tentukan posisi X target berikutnya (Sesuai logika CSS Zig-zag)
         const cycle = nextIndex % 4;
         let nextX = 100;
-        if (cycle === 1) nextX = 50;
-        if (cycle === 3) nextX = 150; 
+        if (cycle === 1) nextX = 50;  // 25% dari 200 (Matches left: 25%)
+        if (cycle === 3) nextX = 150; // 75% dari 200 (Matches left: 75%)
         
         // Tentukan posisi Y target berikutnya
         const nextY = (nextIndex * VERTICAL_SPACING) + NODE_OFFSET_TOP;
 
+        // Bezier curve control points
+        // Control point 1: Turun ke bawah dari titik sekarang
         const c1x = currentX;
         const c1y = currentY + (VERTICAL_SPACING / 2);
 
@@ -158,17 +167,22 @@ const DashboardPage: React.FC = () => {
         </p>
       </div>
 
-      {}
+      {/* Container utama untuk Path dan Node */}
       <div className="relative w-full max-w-md mx-auto" style={{ height: `${containerHeight}px` }}>
         
-        {}
-        {}
+        {/* SVG Layer: Z-index 0 agar di belakang tombol */}
+        {/* 
+            CRITICAL FIX: preserveAspectRatio="none"
+            Ini memaksa SVG untuk meregang (stretch) sepenuhnya mengikuti lebar dan tinggi container.
+            Ini memastikan bahwa koordinat X=50 di SVG selalu sejajar dengan elemen CSS left:25%,
+            tidak peduli berapa lebar layarnya.
+        */}
         <svg 
             className="absolute top-0 left-0 w-full h-full z-0 overflow-visible"
             viewBox={`0 0 200 ${containerHeight}`} 
             preserveAspectRatio="none" 
         >
-          {}
+          {/* Garis Abu-abu (Jalur Background) */}
           <path 
             d={pathD} 
             stroke="#e5e7eb" 
@@ -177,7 +191,7 @@ const DashboardPage: React.FC = () => {
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          {}
+          {/* Garis Kuning Putus-putus (Indikator arah) */}
            <path 
             d={pathD} 
             stroke="#fbbf24" 
@@ -188,7 +202,7 @@ const DashboardPage: React.FC = () => {
           />
         </svg>
 
-        {}
+        {/* Nodes Layer */}
         {topics.map((lesson, index) => {
           const isCompleted = completedLessonIds.includes(lesson.id);
           const isUnlocked = index === 0 || completedLessonIds.includes(topics[index-1]?.id);

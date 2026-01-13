@@ -366,7 +366,11 @@ export const databaseService = {
   // --- ADMIN TOPIC CRUD ---
 
   adminCreateTopic: async (topic: Omit<DBTopic, 'id'>): Promise<DBTopic> => {
+      // Manual creation of ID to act like a slug, or let DB handle it? 
+      // Supabase biasanya pakai UUID atau Serial. 
+      // Karena structure ID 'en-intro-1' manual, kita generate di frontend/service.
       
+      // Generate ID sederhana berbasis timestamp untuk unik, atau gunakan slug dari judul
       const slug = topic.judul_topik.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
       const prefix = topic.bahasa_id === Language.ENGLISH ? 'en' : 'zh';
       const random = Math.floor(Math.random() * 1000);
@@ -444,6 +448,45 @@ export const databaseService = {
   adminDeleteVocabulary: async (id: string | number) => {
       const { error } = await supabase
           .from('kosakata')
+          .delete()
+          .eq('id', id);
+      if (error) throw new Error(error.message);
+  },
+
+  // --- ADMIN EXERCISE (LATIHAN) CRUD ---
+
+  adminGetExercises: async (topicId: string): Promise<DBExercise[]> => {
+      const { data, error } = await supabase
+          .from('latihan')
+          .select('*')
+          .eq('topik_id', topicId)
+          .order('id', { ascending: true });
+
+      if (error) throw new Error(error.message);
+      return data as DBExercise[];
+  },
+
+  adminCreateExercise: async (exercise: Omit<DBExercise, 'id'>): Promise<DBExercise> => {
+      const { data, error } = await supabase
+          .from('latihan')
+          .insert([exercise])
+          .select()
+          .single();
+      if (error) throw new Error(error.message);
+      return data as DBExercise;
+  },
+
+  adminUpdateExercise: async (id: string | number, updates: Partial<DBExercise>) => {
+      const { error } = await supabase
+          .from('latihan')
+          .update(updates)
+          .eq('id', id);
+      if (error) throw new Error(error.message);
+  },
+
+  adminDeleteExercise: async (id: string | number) => {
+      const { error } = await supabase
+          .from('latihan')
           .delete()
           .eq('id', id);
       if (error) throw new Error(error.message);

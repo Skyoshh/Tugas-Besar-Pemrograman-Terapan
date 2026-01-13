@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useUser } from '../hooks/useUser';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { databaseService } from '../services/database';
-import { DBUser, DBTopic, DBVocabulary, Language } from '../types';
+import { DBUser, DBTopic, DBVocabulary, DBExercise, Language } from '../types';
 import { 
     HomeIcon, 
     UserGroupIcon, 
@@ -14,7 +14,8 @@ import {
     TrashIcon,
     CheckCircleIcon,
     XCircleIcon,
-    ListBulletIcon
+    ListBulletIcon,
+    PuzzlePieceIcon
 } from '../components/icons';
 
 // --- SUB-COMPONENTS ---
@@ -67,6 +68,7 @@ const DonutChart: React.FC<{ english: number, mandarin: number }> = ({ english, 
     const total = english + mandarin || 1;
     const englishPercentage = (english / total) * 100;
     
+    // SVG Geometry
     const size = 160;
     const strokeWidth = 25;
     const radius = (size - strokeWidth) / 2;
@@ -84,7 +86,7 @@ const DonutChart: React.FC<{ english: number, mandarin: number }> = ({ english, 
                         stroke="#fef08a" // yellow-200
                         strokeWidth={strokeWidth} 
                     />
-                    {}
+                    {/* Foreground Circle (English) */}
                     <circle 
                         cx={size/2} cy={size/2} r={radius} 
                         fill="transparent" 
@@ -115,6 +117,7 @@ const DonutChart: React.FC<{ english: number, mandarin: number }> = ({ english, 
     );
 };
 
+// Helper: Format Date relatively (Hari ini, Kemarin, dll)
 const formatDate = (dateString: string) => {
     if (!dateString) return '-';
     const date = new Date(dateString);
@@ -134,12 +137,378 @@ const formatDate = (dateString: string) => {
     return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
+// Helper: Determine status badge
 const getUserStatus = (user: DBUser) => {
     if (user.role === 'admin') {
         return { label: 'Admin', color: 'bg-gray-800 text-white' };
     }
     // Default semua non-admin menjadi 'User'
     return { label: 'User', color: 'bg-green-100 text-green-700' };
+};
+
+// --- EXERCISE MANAGEMENT MODAL ---
+const ExerciseManagerModal: React.FC<{
+    topic: DBTopic;
+    onClose: () => void;
+}> = ({ topic, onClose }) => {
+    const [exerciseList, setExerciseList] = useState<DBExercise[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [editMode, setEditMode] = useState<number | string | null>(null);
+    
+    // Form State
+    const [formType, setFormType] = useState<DBExercise['tipe_latihan']>('multiple-choice');
+    const [formQuestion, setFormQuestion] = useState('');
+    const [formAnswer, setFormAnswer] = useState('');
+    const [formOptions, setFormOptions] = useState<string[]>(['', '', '', '']); // Default 4 options
+    
+    // Specific State for Matching Pairs Form
+    const [matchPairs, setMatchPairs] = useState<{left: string, right: string}[]>([{left: '', right: ''}, {left: '', right: ''}]);
+
+    const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+    const [exerciseToDelete, setExerciseToDelete] = useState<DBExercise | null>(null);
+
+    const showNotification = (message: string, type: 'success' | 'error') => {
+        setNotification({ message, type });
+        setTimeout(() => setNotification(null), 3000);
+    };
+
+    const fetchExercises = async () => {
+        setLoading(true);
+        try {
+            const data = await databaseService.adminGetExercises(topic.id);
+            setExerciseList(data);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchExercises();
+    }, [topic]);
+
+    // Handle form reset based on type
+    useEffect(() => {
+        if (!editMode) {
+             if (formType === 'matching-pairs') {
+                setFormQuestion('Cocokkan pasangan berikut:');
+                setFormAnswer('matched'); // Dummy answer for matching pairs
+            } else if (formType === 'drag-and-drop') {
+                setFormQuestion('Susun kalimat berikut:');
+                setFormAnswer('');
+                setFormOptions([]);
+            } else {
+                setFormQuestion('');
+                setFormAnswer('');
+                setFormOptions(['', '', '', '']);
+            }
+        }
+    }, [formType, editMode]);
+
+    const handleEdit = (ex: DBExercise) => {
+        setEditMode(ex.id || null);
+        setFormType(ex.tipe_latihan);
+        setFormQuestion(ex.pertanyaan);
+        setFormAnswer(ex.jawaban_benar);
+        
+        if (ex.tipe_latihan === 'matching-pairs') {
+            const pairs = ex.opsi_jawaban.map(s => {
+                const parts = s.split('|');
+                return { left: parts[0] || '', right: parts[1] || '' };
+            });
+            setMatchPairs(pairs.length > 0 ? pairs : [{left: '', right: ''}]);
+        } else {
+            setFormOptions(ex.opsi_jawaban);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditMode(null);
+        setFormType('multiple-choice');
+        setFormQuestion('');
+        setFormAnswer('');
+        setFormOptions(['', '', '', '']);
+        setMatchPairs([{left: '', right: ''}, {left: '', right: ''}]);
+    };
+
+    const handleDeleteClick = (ex: DBExercise) => {
+        setExerciseToDelete(ex);
+    };
+
+    const executeDelete = async () => {
+        if (!exerciseToDelete || !exerciseToDelete.id) return;
+        try {
+            await databaseService.adminDeleteExercise(exerciseToDelete.id);
+            showNotification('Soal berhasil dihapus', 'success');
+            setExerciseToDelete(null);
+            fetchExercises();
+        } catch (e: any) {
+            showNotification(e.message, 'error');
+            setExerciseToDelete(null);
+        }
+    };
+
+    // --- FORM LOGIC HANDLERS ---
+    
+    // For normal options
+    const updateOption = (idx: number, val: string) => {
+        const newOpts = [...formOptions];
+        newOpts[idx] = val;
+        setFormOptions(newOpts);
+    };
+
+    const addOption = () => setFormOptions([...formOptions, '']);
+    const removeOption = (idx: number) => setFormOptions(formOptions.filter((_, i) => i !== idx));
+
+    // For Matching Pairs
+    const updatePair = (idx: number, field: 'left' | 'right', val: string) => {
+        const newPairs = [...matchPairs];
+        newPairs[idx][field] = val;
+        setMatchPairs(newPairs);
+    };
+    const addPair = () => setMatchPairs([...matchPairs, {left: '', right: ''}]);
+    const removePair = (idx: number) => setMatchPairs(matchPairs.filter((_, i) => i !== idx));
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        
+        // Prepare options array
+        let finalOptions: string[] = [];
+        
+        if (formType === 'matching-pairs') {
+            // Filter empty pairs
+            const validPairs = matchPairs.filter(p => p.left.trim() && p.right.trim());
+            if (validPairs.length < 2) {
+                showNotification('Minimal 2 pasang kata diperlukan', 'error');
+                return;
+            }
+            finalOptions = validPairs.map(p => `${p.left}|${p.right}`);
+        } else {
+             // Filter empty options
+            finalOptions = formOptions.filter(o => o.trim() !== '');
+            if (formType === 'multiple-choice' && finalOptions.length < 2) {
+                 showNotification('Minimal 2 opsi jawaban diperlukan', 'error');
+                 return;
+            }
+        }
+
+        const payload = {
+            topik_id: topic.id,
+            tipe_latihan: formType,
+            pertanyaan: formQuestion,
+            jawaban_benar: formAnswer,
+            opsi_jawaban: finalOptions
+        };
+
+        try {
+            if (editMode) {
+                await databaseService.adminUpdateExercise(editMode, payload);
+                showNotification('Soal diperbarui', 'success');
+            } else {
+                await databaseService.adminCreateExercise(payload);
+                showNotification('Soal ditambahkan', 'success');
+            }
+            handleCancelEdit();
+            fetchExercises();
+        } catch (e: any) {
+            showNotification(e.message, 'error');
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-slide-up relative">
+                 {/* Notifications & Overlays (Same as Vocab Modal) */}
+                 {notification && (
+                    <div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 animate-slide-up ${notification.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
+                        <span className="text-sm font-bold">{notification.message}</span>
+                    </div>
+                )}
+                
+                {exerciseToDelete && (
+                    <div className="absolute inset-0 z-[70] bg-white/90 backdrop-blur-sm flex items-center justify-center p-4">
+                        <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-2xl max-w-sm w-full text-center">
+                            <h4 className="text-lg font-bold mb-4">Hapus Soal ini?</h4>
+                            <div className="flex gap-2 justify-center">
+                                <button onClick={() => setExerciseToDelete(null)} className="px-4 py-2 bg-gray-100 rounded-lg">Batal</button>
+                                <button onClick={executeDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg">Hapus</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                 {/* Header */}
+                <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                    <div>
+                        <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                             <PuzzlePieceIcon className="w-6 h-6 text-green-600"/>
+                             Manajemen Latihan
+                        </h3>
+                        <p className="text-sm text-gray-500 mt-1">Topik: <span className="font-bold text-gray-700">{topic.judul_topik}</span></p>
+                    </div>
+                    <button onClick={onClose} className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full">
+                        <span className="text-2xl leading-none">&times;</span>
+                    </button>
+                </div>
+
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                    {/* LEFT: FORM */}
+                    <div className="w-full md:w-5/12 bg-gray-50 p-6 border-r border-gray-200 overflow-y-auto">
+                        <h4 className="font-bold text-gray-700 mb-4">{editMode ? 'Edit Soal' : 'Tambah Soal Baru'}</h4>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            {/* 1. Tipe Latihan */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tipe Latihan</label>
+                                <select 
+                                    className="w-full px-3 py-2 border rounded-lg"
+                                    value={formType}
+                                    onChange={(e) => setFormType(e.target.value as any)}
+                                >
+                                    <option value="multiple-choice">Pilihan Ganda</option>
+                                    <option value="fill-in-the-blank">Isian Singkat</option>
+                                    <option value="drag-and-drop">Susun Kalimat (Drag & Drop)</option>
+                                    <option value="matching-pairs">Mencocokkan Pasangan</option>
+                                </select>
+                            </div>
+
+                            {/* 2. Pertanyaan */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pertanyaan / Instruksi</label>
+                                <textarea 
+                                    required rows={2}
+                                    className="w-full px-3 py-2 border rounded-lg"
+                                    value={formQuestion}
+                                    onChange={e => setFormQuestion(e.target.value)}
+                                    placeholder="Contoh: Apa arti kata 'Hello'?"
+                                />
+                            </div>
+
+                            {/* 3. Logic Input Berdasarkan Tipe */}
+                            
+                            {/* A. MATCHING PAIRS INPUT */}
+                            {formType === 'matching-pairs' && (
+                                <div className="space-y-2">
+                                    <label className="block text-xs font-bold text-gray-500 uppercase">Pasangan Kata</label>
+                                    <div className="space-y-2">
+                                        {matchPairs.map((pair, idx) => (
+                                            <div key={idx} className="flex gap-2 items-center">
+                                                <input 
+                                                    placeholder="Kiri (ex: Apple)" 
+                                                    className="flex-1 px-2 py-1 border rounded text-sm"
+                                                    value={pair.left}
+                                                    onChange={e => updatePair(idx, 'left', e.target.value)}
+                                                />
+                                                <span className="text-gray-400">↔</span>
+                                                <input 
+                                                    placeholder="Kanan (ex: Apel)" 
+                                                    className="flex-1 px-2 py-1 border rounded text-sm"
+                                                    value={pair.right}
+                                                    onChange={e => updatePair(idx, 'right', e.target.value)}
+                                                />
+                                                <button type="button" onClick={() => removePair(idx)} className="text-red-400 hover:text-red-600">&times;</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button type="button" onClick={addPair} className="text-sm text-green-600 font-bold hover:underline">+ Tambah Pasangan</button>
+                                </div>
+                            )}
+
+                            {/* B. MULTIPLE CHOICE / DRAG DROP */}
+                            {(formType === 'multiple-choice' || formType === 'drag-and-drop') && (
+                                <div className="space-y-2">
+                                    <label className="block text-xs font-bold text-gray-500 uppercase">
+                                        {formType === 'drag-and-drop' ? 'Kata-kata untuk disusun' : 'Opsi Jawaban'}
+                                    </label>
+                                    {formOptions.map((opt, idx) => (
+                                        <div key={idx} className="flex gap-2">
+                                            <input 
+                                                className="flex-1 px-3 py-1 border rounded text-sm"
+                                                value={opt}
+                                                onChange={e => updateOption(idx, e.target.value)}
+                                                placeholder={`Opsi ${idx + 1}`}
+                                            />
+                                            <button type="button" onClick={() => removeOption(idx)} className="text-red-400">&times;</button>
+                                        </div>
+                                    ))}
+                                    <button type="button" onClick={addOption} className="text-sm text-green-600 font-bold hover:underline">+ Tambah Opsi</button>
+                                </div>
+                            )}
+
+                            {/* 4. Jawaban Benar (Kecuali Matching Pairs) */}
+                            {formType !== 'matching-pairs' && (
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Kunci Jawaban</label>
+                                    <input 
+                                        type="text" required
+                                        className="w-full px-3 py-2 border rounded-lg bg-green-50 border-green-200"
+                                        value={formAnswer}
+                                        onChange={e => setFormAnswer(e.target.value)}
+                                        placeholder={formType === 'drag-and-drop' ? "Kalimat lengkap yang benar" : "Jawaban yang benar"}
+                                    />
+                                    {formType === 'multiple-choice' && <p className="text-xs text-gray-500 mt-1">Harus sama persis dengan salah satu opsi.</p>}
+                                </div>
+                            )}
+
+                            <div className="pt-4 flex gap-2">
+                                {editMode && (
+                                    <button type="button" onClick={handleCancelEdit} className="flex-1 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg">Batal</button>
+                                )}
+                                <button type="submit" className="flex-1 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700">
+                                    {editMode ? 'Simpan Perubahan' : 'Tambah Soal'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {/* RIGHT: LIST */}
+                    <div className="flex-1 bg-white p-6 overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h4 className="font-bold text-gray-700">Daftar Soal ({exerciseList.length})</h4>
+                        </div>
+                        {loading ? (
+                             <p className="text-center text-gray-400 py-10">Memuat...</p>
+                        ) : exerciseList.length === 0 ? (
+                            <div className="text-center py-10 border-2 border-dashed border-gray-200 rounded-xl">
+                                <p className="text-gray-400">Belum ada soal latihan.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {exerciseList.map((ex, i) => (
+                                    <div key={ex.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors group relative">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700 mb-2 uppercase tracking-wide">
+                                                    {ex.tipe_latihan.replace(/-/g, ' ')}
+                                                </span>
+                                                <p className="font-bold text-gray-800 text-sm mb-1">{i+1}. {ex.pertanyaan}</p>
+                                                
+                                                {ex.tipe_latihan === 'matching-pairs' ? (
+                                                     <div className="flex flex-wrap gap-2 mt-2">
+                                                        {ex.opsi_jawaban.map((pair, idx) => (
+                                                            <span key={idx} className="bg-gray-100 px-2 py-1 rounded text-xs text-gray-600 border border-gray-300">
+                                                                {pair.replace('|', ' ↔ ')}
+                                                            </span>
+                                                        ))}
+                                                     </div>
+                                                ) : (
+                                                    <p className="text-xs text-gray-500 mt-1">Jawaban: <span className="font-semibold text-green-700">{ex.jawaban_benar}</span></p>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleEdit(ex)} className="p-1 text-blue-500 hover:text-blue-700"><PencilSquareIcon className="w-5 h-5"/></button>
+                                                <button onClick={() => handleDeleteClick(ex)} className="p-1 text-red-500 hover:text-red-700"><TrashIcon className="w-5 h-5"/></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 // --- VOCABULARY MANAGEMENT MODAL ---
@@ -242,7 +611,7 @@ const VocabularyManagerModal: React.FC<{
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden animate-slide-up relative">
                 
-                {}
+                {/* IN-MODAL NOTIFICATION */}
                 {notification && (
                     <div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 animate-slide-up ${notification.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
                         {notification.type === 'success' ? <CheckCircleIcon className="w-5 h-5"/> : <XCircleIcon className="w-5 h-5"/>}
@@ -250,7 +619,7 @@ const VocabularyManagerModal: React.FC<{
                     </div>
                 )}
 
-                {}
+                {/* DELETE CONFIRMATION OVERLAY */}
                 {vocabToDelete && (
                     <div className="absolute inset-0 z-[70] bg-white/90 backdrop-blur-sm flex items-center justify-center p-4 transition-all">
                         <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-2xl max-w-sm w-full text-center transform scale-100 animate-fade-in">
@@ -279,7 +648,7 @@ const VocabularyManagerModal: React.FC<{
                     </div>
                 )}
 
-                {}
+                {/* Header */}
                 <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                     <div>
                         <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -294,7 +663,7 @@ const VocabularyManagerModal: React.FC<{
                 </div>
 
                 <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-                    {}
+                    {/* Left: Form */}
                     <div className="w-full md:w-1/3 bg-gray-50 p-6 border-r border-gray-200 overflow-y-auto">
                         <h4 className="font-bold text-gray-700 mb-4">{editMode ? 'Edit Kosakata' : 'Tambah Kosakata Baru'}</h4>
                         
@@ -354,7 +723,7 @@ const VocabularyManagerModal: React.FC<{
                         </form>
                     </div>
 
-                    {}
+                    {/* Right: List */}
                     <div className="flex-1 bg-white p-6 overflow-y-auto">
                         <div className="flex justify-between items-center mb-4">
                             <h4 className="font-bold text-gray-700">Daftar Kosakata ({vocabList.length})</h4>
@@ -426,6 +795,7 @@ const UserManagementView: React.FC = () => {
 
     const showNotification = (message: string, type: 'success' | 'error') => {
         setNotification({ message, type });
+        // Auto hide after 3 seconds
         setTimeout(() => setNotification(null), 3000);
     };
 
@@ -458,7 +828,7 @@ const UserManagementView: React.FC = () => {
             nama_lengkap: user.nama_lengkap, 
             email: user.email, 
             role: user.role || 'user', 
-            password: ''
+            password: '' // Password always blank initially on edit
         });
         setFormError('');
         setIsModalOpen(true);
@@ -481,7 +851,7 @@ const UserManagementView: React.FC = () => {
             fetchUsers();
             showNotification('Pengguna berhasil dihapus', 'success');
         } catch (e: any) {
-            setIsDeleteModalOpen(false);
+            setIsDeleteModalOpen(false); // Close modal even on error to show toast
             showNotification(e.message, 'error');
         }
     };
@@ -524,7 +894,7 @@ const UserManagementView: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            {}
+            {/* Notification Toast */}
             {notification && (
                 <div className={`fixed top-6 right-6 z-[60] px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 transition-all transform duration-300 animate-slide-up ${notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
                     {notification.type === 'success' ? <CheckCircleIcon className="w-6 h-6" /> : <XCircleIcon className="w-6 h-6" />}
@@ -593,7 +963,7 @@ const UserManagementView: React.FC = () => {
                 </div>
             </div>
 
-            {}
+            {/* Create/Edit User Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-slide-up">
@@ -675,7 +1045,7 @@ const UserManagementView: React.FC = () => {
                 </div>
             )}
 
-            {}
+            {/* DELETE CONFIRMATION MODAL */}
             {isDeleteModalOpen && userToDelete && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-slide-up transform transition-all">
@@ -732,8 +1102,9 @@ const CourseManagementView: React.FC = () => {
     });
     const [formError, setFormError] = useState('');
 
-    // Vocab Modal State
+    // Content Modals State
     const [selectedTopicForVocab, setSelectedTopicForVocab] = useState<DBTopic | null>(null);
+    const [selectedTopicForExercises, setSelectedTopicForExercises] = useState<DBTopic | null>(null);
 
     // Delete Modal
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -765,6 +1136,7 @@ const CourseManagementView: React.FC = () => {
 
     const handleOpenAdd = () => {
         setCurrentTopic(null);
+        // Default order = last + 1
         const nextOrder = topics.length > 0 ? (Math.max(...topics.map(t => t.urutan)) + 1) : 1;
         setFormData({
             judul_topik: '',
@@ -909,6 +1281,9 @@ const CourseManagementView: React.FC = () => {
                                             <button onClick={() => setSelectedTopicForVocab(topic)} className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg" title="Kelola Kosakata">
                                                 <ListBulletIcon className="w-5 h-5"/>
                                             </button>
+                                            <button onClick={() => setSelectedTopicForExercises(topic)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg" title="Kelola Soal Latihan">
+                                                <PuzzlePieceIcon className="w-5 h-5"/>
+                                            </button>
                                             <button onClick={() => handleOpenEdit(topic)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit Topik">
                                                 <PencilSquareIcon className="w-5 h-5"/>
                                             </button>
@@ -924,7 +1299,7 @@ const CourseManagementView: React.FC = () => {
                 </div>
             </div>
 
-            {}
+            {/* Modal Form Topik */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-slide-up">
@@ -1006,7 +1381,7 @@ const CourseManagementView: React.FC = () => {
                 </div>
             )}
 
-            {}
+            {/* Vocabulary Modal */}
             {selectedTopicForVocab && (
                 <VocabularyManagerModal 
                     topic={selectedTopicForVocab} 
@@ -1014,7 +1389,15 @@ const CourseManagementView: React.FC = () => {
                 />
             )}
 
-            {}
+            {/* Exercise Modal */}
+            {selectedTopicForExercises && (
+                <ExerciseManagerModal 
+                    topic={selectedTopicForExercises} 
+                    onClose={() => setSelectedTopicForExercises(null)} 
+                />
+            )}
+
+            {/* Delete Modal */}
             {isDeleteModalOpen && topicToDelete && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-slide-up">
@@ -1051,7 +1434,7 @@ const DashboardOverview: React.FC<{
 }> = ({ stats, recentUsers, loadingData }) => {
     return (
         <div className="space-y-8 animate-fade-in">
-             {}
+             {/* 1. Stat Cards Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
                     <div>
@@ -1084,10 +1467,10 @@ const DashboardOverview: React.FC<{
                 </div>
             </div>
 
-            {}
+            {/* 2. Main Content: Table & Donut Chart */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                {}
+                {/* Left Column: Recent Users Table (Takes 2/3 width) */}
                 <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                     <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
                         <h3 className="font-bold text-gray-800">Aktivitas Terbaru</h3>
@@ -1138,7 +1521,7 @@ const DashboardOverview: React.FC<{
                     </div>
                 </div>
 
-                {}
+                {/* Right Column: Topic Distribution (Donut) (Takes 1/3 width) */}
                 <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm h-fit">
                     <h3 className="font-bold text-gray-800 mb-6 text-center">Distribusi Konten</h3>
                     <DonutChart 
@@ -1157,8 +1540,10 @@ const AdminDashboardPage: React.FC = () => {
   const { user, isLoading, logout } = useUser();
   const navigate = useNavigate();
   
+  // View State
   const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'courses'>('dashboard');
 
+  // Dashboard specific States
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalEnglishTopics: 0,
@@ -1184,6 +1569,7 @@ const AdminDashboardPage: React.FC = () => {
       }
     };
     
+    // Only fetch overview stats if we are on dashboard tab or init
     if (user?.role === 'admin' && activeTab === 'dashboard') {
       fetchAdminData();
     }
@@ -1202,13 +1588,13 @@ const AdminDashboardPage: React.FC = () => {
 
   return (
     <div className="flex min-h-screen bg-gray-50 font-sans">
-      {}
+      {/* Sidebar (Fixed Width) */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
 
-      {}
+      {/* Main Content (Offset by Sidebar Width) */}
       <div className="flex-1 ml-64 flex flex-col">
         
-        {}
+        {/* Topbar */}
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 sticky top-0 z-10 shadow-sm">
             <h2 className="text-xl font-bold text-gray-800 capitalize">
                 {activeTab === 'dashboard' && 'Overview'}
@@ -1226,7 +1612,7 @@ const AdminDashboardPage: React.FC = () => {
             </div>
         </header>
 
-        {}
+        {/* Scrollable Content */}
         <main className="flex-1 p-8 overflow-y-auto">
             {activeTab === 'dashboard' && (
                 <DashboardOverview stats={stats} recentUsers={recentUsers} loadingData={loadingData} />

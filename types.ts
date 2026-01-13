@@ -48,10 +48,11 @@ export interface DBVocabulary {
 export interface DBExercise {
   id?: number | string;
   topik_id: string;
-  tipe_latihan: 'multiple-choice' | 'fill-in-the-blank' | 'drag-and-drop';
+  // Menambahkan 'matching-pairs'
+  tipe_latihan: 'multiple-choice' | 'fill-in-the-blank' | 'drag-and-drop' | 'matching-pairs';
   pertanyaan: string;
   jawaban_benar: string;
-  opsi_jawaban: string[]; // Disimpan sebagai array string untuk simplifikasi tabel Opsi_Jawaban
+  opsi_jawaban: string[]; // Untuk matching-pairs, format string adalah "Kiri|Kanan"
 }
 
 // Representasi tabel 'Progres_Pengguna'

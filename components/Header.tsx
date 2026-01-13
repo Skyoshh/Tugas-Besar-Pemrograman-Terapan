@@ -18,7 +18,8 @@ const Header: React.FC = () => {
     logout();
     navigate('/');
   };
-
+  
+  // Tentukan link logo: Admin ke /admin, User ke / (atau dashboard)
   const logoLink = user?.role === 'admin' ? '/admin' : '/';
   const isAdmin = user?.role === 'admin';
 
@@ -33,7 +34,7 @@ const Header: React.FC = () => {
             </NavLink>
              <div className="hidden md:flex items-center space-x-4 pl-4">
               
-              {}
+              {/* Hide Learning Dashboard link for Admin to keep it purely Admin focused */}
               {!isAdmin && (
                 <NavLink to="/dashboard" className={({isActive}) => `px-3 py-2 rounded-md text-sm font-medium ${isActive ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'}`}>
                     Belajar
@@ -59,7 +60,7 @@ const Header: React.FC = () => {
             </div>
           </div>
           
-          {}
+          {/* Status Bar: Only for regular learners */}
           {user && user.learning_language && !isAdmin && (
              <div className="flex items-center space-x-4">
                <div className="flex items-center space-x-1 text-orange-500 font-bold">

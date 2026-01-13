@@ -20,6 +20,7 @@ const AuthPage: React.FC = () => {
     clearError();
   }, [searchParams]);
   
+  // If user is already logged in
   useEffect(() => {
     if (user) {
         // PRIORITAS 1: Cek apakah user adalah Admin
@@ -56,6 +57,7 @@ const AuthPage: React.FC = () => {
     const newMode = mode === 'login' ? 'register' : 'login';
     setMode(newMode);
     setSearchParams({ mode: newMode });
+    // Reset form inputs except email maybe? better clean all
     setPassword('');
     setName('');
   };
