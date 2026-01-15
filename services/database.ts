@@ -53,7 +53,6 @@ const shiftTopicsDown = async (languageId: string, level: string, startOrder: nu
 // --- SERVICE METHODS (SUPABASE IMPLEMENTATION) ---
 
 export const databaseService = {
-  // Init tidak lagi diperlukan untuk Supabase client-side
   init: async () => {
     return true;
   },

@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useUser } from '../hooks/useUser';
 import { DBTopic, DBUserProgress, TopicLevel } from '../types';
