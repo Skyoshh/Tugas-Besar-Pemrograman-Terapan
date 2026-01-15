@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useUser } from '../hooks/useUser';
 import { Language, DBUserProgress } from '../types';
 import { Navigate, Link } from 'react-router-dom';
@@ -9,6 +10,7 @@ import { UKFlag, ChinaFlag } from '../components/Flags';
 const ProfilePage: React.FC = () => {
     const { user, resetProgress, selectLanguage, logout } = useUser();
     const [completedCount, setCompletedCount] = useState(0);
+    const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
     useEffect(() => {
         if(user && user.id) {
@@ -27,11 +29,10 @@ const ProfilePage: React.FC = () => {
     const languageName = user.learning_language === Language.ENGLISH ? 'Bahasa Inggris' : 'Bahasa Mandarin';
     const FlagIcon = user.learning_language === Language.ENGLISH ? UKFlag : ChinaFlag;
 
-    const handleReset = async () => {
-        if (window.confirm('Apakah Anda yakin ingin mengatur ulang kemajuan Anda untuk bahasa ini? Tindakan ini tidak dapat diurungkan.')) {
-            await resetProgress();
-            setCompletedCount(0);
-        }
+    const handleConfirmReset = async () => {
+        await resetProgress();
+        setCompletedCount(0);
+        setIsResetModalOpen(false);
     };
 
     return (
@@ -80,7 +81,7 @@ const ProfilePage: React.FC = () => {
                     
                     <p className="font-semibold pt-4 text-gray-700">Pengaturan Akun:</p>
                     <button
-                        onClick={handleReset}
+                        onClick={() => setIsResetModalOpen(true)}
                         className="w-full text-left px-4 py-3 bg-red-50 text-red-700 font-bold rounded-lg hover:bg-red-100 transition-colors"
                     >
                         Atur Ulang Kemajuan ({languageName})
@@ -94,6 +95,38 @@ const ProfilePage: React.FC = () => {
                     </button>
                  </div>
             </div>
+            {isResetModalOpen && createPortal(
+                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-md p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-slide-up">
+                        <div className="p-6 text-center">
+                            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <span className="text-2xl">⚠️</span>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-2">Atur Ulang Kemajuan?</h3>
+                            <p className="text-gray-500 text-sm mb-6">
+                                Apakah Anda yakin ingin mengatur ulang kemajuan untuk <span className="font-bold text-gray-800">{languageName}</span>?
+                                <br />
+                                <span className="text-red-500 text-xs">Tindakan ini tidak dapat diurungkan.</span>
+                            </p>
+                            <div className="flex gap-3 justify-center">
+                                <button
+                                    onClick={() => setIsResetModalOpen(false)}
+                                    className="px-5 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 transition-colors"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    onClick={handleConfirmReset}
+                                    className="px-5 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 shadow-md transition-colors"
+                                >
+                                    Ya, Atur Ulang
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };
