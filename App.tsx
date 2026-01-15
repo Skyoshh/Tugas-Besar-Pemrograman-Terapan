@@ -8,6 +8,7 @@ import LanguageSelectionPage from './pages/LanguageSelectionPage';
 import DashboardPage from './pages/DashboardPage';
 import LessonPage from './pages/LessonPage';
 import ProfilePage from './pages/ProfilePage';
+import LeaderboardPage from './pages/LeaderboardPage';
 import AuthPage from './pages/AuthPage';
 import AdminDashboardPage from './pages/AdminDashboardPage'; // Import Admin Page
 import Header from './components/Header';
@@ -36,6 +37,7 @@ const AppContent: React.FC = () => {
                     <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/lesson/:lessonId" element={<LessonPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
+                    <Route path="/leaderboard" element={<LeaderboardPage />} />
                     <Route path="/admin" element={<AdminDashboardPage />} />
                 </Routes>
             </main>

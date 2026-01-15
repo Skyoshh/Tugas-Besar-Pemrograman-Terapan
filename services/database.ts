@@ -13,6 +13,43 @@ if (!supabaseUrl || !supabaseKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
+// --- HELPER FUNCTION FOR REORDERING ---
+const shiftTopicsDown = async (languageId: string, level: string, startOrder: number, excludeId?: string) => {
+    // 1. Cek apakah ada topik dengan urutan yang sama persis
+    const { data: collision } = await supabase
+        .from('topik')
+        .select('id')
+        .eq('bahasa_id', languageId)
+        .eq('level', level)
+        .eq('urutan', startOrder)
+        .neq('id', excludeId || '') // Jangan hitung diri sendiri saat edit
+        .maybeSingle();
+
+    // Jika tidak ada yang bentrok di urutan ini, tidak perlu geser apa-apa
+    if (!collision) return;
+
+    // 2. Jika ada bentrok, ambil semua topik dari urutan tersebut ke atas
+    const { data: topicsToShift } = await supabase
+        .from('topik')
+        .select('id, urutan')
+        .eq('bahasa_id', languageId)
+        .eq('level', level)
+        .gte('urutan', startOrder)
+        .neq('id', excludeId || '')
+        .order('urutan', { ascending: false }); // Urutkan dari terbesar agar update aman
+
+    if (!topicsToShift) return;
+
+    // 3. Update satu per satu (Geser +1)
+    // Note: Idealnya pakai RPC function di Supabase untuk atomicity, tapi ini solusi client-side.
+    for (const t of topicsToShift) {
+        await supabase
+            .from('topik')
+            .update({ urutan: t.urutan + 1 })
+            .eq('id', t.id);
+    }
+};
+
 // --- SERVICE METHODS (SUPABASE IMPLEMENTATION) ---
 
 export const databaseService = {
@@ -240,6 +277,22 @@ export const databaseService = {
     }
   },
 
+  // --- LEADERBOARD ---
+  getLeaderboard: async (limit: number = 50): Promise<DBUser[]> => {
+    const { data, error } = await supabase
+        .from('pengguna')
+        .select('id, nama_lengkap, total_xp, daily_streak, learning_language, level')
+        .eq('role', 'user') // Filter only normal users, not admin
+        .order('total_xp', { ascending: false })
+        .limit(limit);
+    
+    if (error) {
+        console.error("Error fetching leaderboard:", error);
+        return [];
+    }
+    return data as DBUser[];
+  },
+
   // --- ADMIN STATS ---
   getAdminStats: async () => {
     const [users, topicsEn, topicsZh] = await Promise.all([
@@ -366,10 +419,13 @@ export const databaseService = {
   // --- ADMIN TOPIC CRUD ---
 
   adminCreateTopic: async (topic: Omit<DBTopic, 'id'>): Promise<DBTopic> => {
-      // Manual creation of ID to act like a slug, or let DB handle it? 
-      // Supabase biasanya pakai UUID atau Serial. 
-      // Karena structure ID 'en-intro-1' manual, kita generate di frontend/service.
-      
+      // Ensure level is set (default Beginner if missing)
+      const topicLevel = topic.level || 'Beginner';
+
+      // 1. Shift existing topics if order is duplicated
+      await shiftTopicsDown(topic.bahasa_id, topicLevel, topic.urutan);
+
+      // 2. Prepare ID
       // Generate ID sederhana berbasis timestamp untuk unik, atau gunakan slug dari judul
       const slug = topic.judul_topik.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
       const prefix = topic.bahasa_id === Language.ENGLISH ? 'en' : 'zh';
@@ -378,7 +434,8 @@ export const databaseService = {
 
       const newTopic = {
           id: customId,
-          ...topic
+          ...topic,
+          level: topicLevel
       };
 
       const { data, error } = await supabase
@@ -392,6 +449,19 @@ export const databaseService = {
   },
 
   adminUpdateTopic: async (id: string, updates: Partial<DBTopic>) => {
+      // If we are updating urutan or level, we need to handle shifting
+      if (updates.urutan !== undefined) {
+         // We need the topic's current data to know language and level
+         const { data: currentTopic } = await supabase.from('topik').select('bahasa_id, level').eq('id', id).single();
+         if (currentTopic) {
+             const targetLevel = updates.level || currentTopic.level || 'Beginner';
+             const targetLang = updates.bahasa_id || currentTopic.bahasa_id;
+             
+             // Check and Shift
+             await shiftTopicsDown(targetLang, targetLevel, updates.urutan, id);
+         }
+      }
+
       const { error } = await supabase
           .from('topik')
           .update(updates)

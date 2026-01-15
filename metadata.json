@@ -1,7 +1,5 @@
 {
   "name": "Bahasa Buddy",
   "description": "An interactive language-learning platform inspired by Duolingo, designed to help Indonesian speakers learn English and Mandarin Chinese through gamified lessons and quizzes.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
+  "requestFramePermissions": []
 }

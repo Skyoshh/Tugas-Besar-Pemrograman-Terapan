@@ -1,9 +1,10 @@
 
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useUser } from '../hooks/useUser';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { databaseService } from '../services/database';
-import { DBUser, DBTopic, DBVocabulary, DBExercise, Language } from '../types';
+import { DBUser, DBTopic, DBVocabulary, DBExercise, Language, TopicLevel } from '../types';
 import { 
     HomeIcon, 
     UserGroupIcon, 
@@ -15,36 +16,46 @@ import {
     CheckCircleIcon,
     XCircleIcon,
     ListBulletIcon,
-    PuzzlePieceIcon
+    PuzzlePieceIcon,
+    Bars3Icon
 } from '../components/icons';
+import { UKFlag, ChinaFlag } from '../components/Flags';
 
-// --- SUB-COMPONENTS ---
 
-// 1. Sidebar Component
+
+
 const Sidebar: React.FC<{ 
     activeTab: 'dashboard' | 'users' | 'courses', 
     setActiveTab: (tab: 'dashboard' | 'users' | 'courses') => void,
-    onLogout: () => void 
-}> = ({ activeTab, setActiveTab, onLogout }) => {
+    onLogout: () => void,
+    isOpen: boolean,
+    onClose: () => void
+}> = ({ activeTab, setActiveTab, onLogout, isOpen, onClose }) => {
     const getLinkClass = (tabName: string) => `flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors w-full text-left ${activeTab === tabName ? 'bg-green-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`;
 
     return (
-        <aside className="w-64 bg-gray-900 text-white flex flex-col h-screen fixed left-0 top-0 overflow-y-auto z-20">
-            <div className="p-6 border-b border-gray-800 flex items-center gap-3">
-                <span className="text-3xl">🐼</span>
-                <h1 className="text-lg font-bold tracking-wider">BAHASA BUDDY<br/><span className="text-xs text-gray-400 font-normal">ADMIN PANEL</span></h1>
+        <aside className={`w-64 bg-gray-900 text-white flex flex-col fixed top-0 bottom-0 left-0 z-40 transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 shadow-xl`}>
+            <div className="p-6 border-b border-gray-800 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <span className="text-3xl">🐼</span>
+                    <h1 className="text-lg font-bold tracking-wider">BAHASA BUDDY<br/><span className="text-xs text-gray-400 font-normal">ADMIN PANEL</span></h1>
+                </div>
+                {/* Close button for mobile */}
+                <button onClick={onClose} className="md:hidden text-gray-400 hover:text-white">
+                    <span className="text-2xl">&times;</span>
+                </button>
             </div>
             
             <nav className="flex-1 py-6 px-3 space-y-1">
-                <button onClick={() => setActiveTab('dashboard')} className={getLinkClass('dashboard')}>
+                <button onClick={() => { setActiveTab('dashboard'); onClose(); }} className={getLinkClass('dashboard')}>
                     <HomeIcon className="w-5 h-5" />
                     Dashboard
                 </button>
-                <button onClick={() => setActiveTab('users')} className={getLinkClass('users')}>
+                <button onClick={() => { setActiveTab('users'); onClose(); }} className={getLinkClass('users')}>
                     <UserGroupIcon className="w-5 h-5" />
                     Pengguna
                 </button>
-                 <button onClick={() => setActiveTab('courses')} className={getLinkClass('courses')}>
+                 <button onClick={() => { setActiveTab('courses'); onClose(); }} className={getLinkClass('courses')}>
                     <BookOpenIcon className="w-5 h-5" />
                     Manajemen Topik
                 </button>
@@ -63,12 +74,12 @@ const Sidebar: React.FC<{
     );
 };
 
-// 2. SVG Donut Chart Component
+
 const DonutChart: React.FC<{ english: number, mandarin: number }> = ({ english, mandarin }) => {
     const total = english + mandarin || 1;
     const englishPercentage = (english / total) * 100;
     
-    // SVG Geometry
+
     const size = 160;
     const strokeWidth = 25;
     const radius = (size - strokeWidth) / 2;
@@ -79,18 +90,18 @@ const DonutChart: React.FC<{ english: number, mandarin: number }> = ({ english, 
         <div className="flex flex-col items-center">
             <div className="relative w-40 h-40">
                 <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="rotate-[-90deg]">
-                    {/* Background Circle (Mandarin/Sisa) */}
+
                     <circle 
                         cx={size/2} cy={size/2} r={radius} 
                         fill="transparent" 
-                        stroke="#fef08a" // yellow-200
+                        stroke="#fef08a"
                         strokeWidth={strokeWidth} 
                     />
-                    {/* Foreground Circle (English) */}
+
                     <circle 
                         cx={size/2} cy={size/2} r={radius} 
                         fill="transparent" 
-                        stroke="#f87171" // red-400 (using red for English as in previous flag logic or switch to blue) - Let's use Red for UK, Yellow for China based on flags
+                        stroke="#f87171"
                         strokeWidth={strokeWidth}
                         strokeDasharray={circumference}
                         strokeDashoffset={offset}
@@ -117,36 +128,15 @@ const DonutChart: React.FC<{ english: number, mandarin: number }> = ({ english, 
     );
 };
 
-// Helper: Format Date relatively (Hari ini, Kemarin, dll)
-const formatDate = (dateString: string) => {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    const now = new Date();
-    
-    // Reset hours to get pure day difference
-    const d1 = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const d2 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
-    const diffTime = Math.abs(d2.getTime() - d1.getTime());
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Hari ini';
-    if (diffDays === 1) return 'Kemarin';
-    if (diffDays < 7) return `${diffDays} hari lalu`;
-    
-    return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-};
-
-// Helper: Determine status badge
 const getUserStatus = (user: DBUser) => {
     if (user.role === 'admin') {
         return { label: 'Admin', color: 'bg-gray-800 text-white' };
     }
-    // Default semua non-admin menjadi 'User'
+
     return { label: 'User', color: 'bg-green-100 text-green-700' };
 };
 
-// --- EXERCISE MANAGEMENT MODAL ---
+
 const ExerciseManagerModal: React.FC<{
     topic: DBTopic;
     onClose: () => void;
@@ -155,13 +145,11 @@ const ExerciseManagerModal: React.FC<{
     const [loading, setLoading] = useState(true);
     const [editMode, setEditMode] = useState<number | string | null>(null);
     
-    // Form State
     const [formType, setFormType] = useState<DBExercise['tipe_latihan']>('multiple-choice');
     const [formQuestion, setFormQuestion] = useState('');
     const [formAnswer, setFormAnswer] = useState('');
     const [formOptions, setFormOptions] = useState<string[]>(['', '', '', '']); // Default 4 options
     
-    // Specific State for Matching Pairs Form
     const [matchPairs, setMatchPairs] = useState<{left: string, right: string}[]>([{left: '', right: ''}, {left: '', right: ''}]);
 
     const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
@@ -188,12 +176,11 @@ const ExerciseManagerModal: React.FC<{
         fetchExercises();
     }, [topic]);
 
-    // Handle form reset based on type
     useEffect(() => {
         if (!editMode) {
              if (formType === 'matching-pairs') {
                 setFormQuestion('Cocokkan pasangan berikut:');
-                setFormAnswer('matched'); // Dummy answer for matching pairs
+                setFormAnswer('matched'); 
             } else if (formType === 'drag-and-drop') {
                 setFormQuestion('Susun kalimat berikut:');
                 setFormAnswer('');
@@ -249,9 +236,6 @@ const ExerciseManagerModal: React.FC<{
         }
     };
 
-    // --- FORM LOGIC HANDLERS ---
-    
-    // For normal options
     const updateOption = (idx: number, val: string) => {
         const newOpts = [...formOptions];
         newOpts[idx] = val;
@@ -261,7 +245,6 @@ const ExerciseManagerModal: React.FC<{
     const addOption = () => setFormOptions([...formOptions, '']);
     const removeOption = (idx: number) => setFormOptions(formOptions.filter((_, i) => i !== idx));
 
-    // For Matching Pairs
     const updatePair = (idx: number, field: 'left' | 'right', val: string) => {
         const newPairs = [...matchPairs];
         newPairs[idx][field] = val;
@@ -273,11 +256,9 @@ const ExerciseManagerModal: React.FC<{
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         
-        // Prepare options array
         let finalOptions: string[] = [];
         
         if (formType === 'matching-pairs') {
-            // Filter empty pairs
             const validPairs = matchPairs.filter(p => p.left.trim() && p.right.trim());
             if (validPairs.length < 2) {
                 showNotification('Minimal 2 pasang kata diperlukan', 'error');
@@ -285,7 +266,6 @@ const ExerciseManagerModal: React.FC<{
             }
             finalOptions = validPairs.map(p => `${p.left}|${p.right}`);
         } else {
-             // Filter empty options
             finalOptions = formOptions.filter(o => o.trim() !== '');
             if (formType === 'multiple-choice' && finalOptions.length < 2) {
                  showNotification('Minimal 2 opsi jawaban diperlukan', 'error');
@@ -316,10 +296,9 @@ const ExerciseManagerModal: React.FC<{
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    return createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-slide-up relative">
-                 {/* Notifications & Overlays (Same as Vocab Modal) */}
                  {notification && (
                     <div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 animate-slide-up ${notification.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
                         <span className="text-sm font-bold">{notification.message}</span>
@@ -338,7 +317,6 @@ const ExerciseManagerModal: React.FC<{
                     </div>
                 )}
 
-                 {/* Header */}
                 <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                     <div>
                         <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -353,11 +331,9 @@ const ExerciseManagerModal: React.FC<{
                 </div>
 
                 <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-                    {/* LEFT: FORM */}
                     <div className="w-full md:w-5/12 bg-gray-50 p-6 border-r border-gray-200 overflow-y-auto">
                         <h4 className="font-bold text-gray-700 mb-4">{editMode ? 'Edit Soal' : 'Tambah Soal Baru'}</h4>
                         <form onSubmit={handleSubmit} className="space-y-4">
-                            {/* 1. Tipe Latihan */}
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tipe Latihan</label>
                                 <select 
@@ -372,7 +348,6 @@ const ExerciseManagerModal: React.FC<{
                                 </select>
                             </div>
 
-                            {/* 2. Pertanyaan */}
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pertanyaan / Instruksi</label>
                                 <textarea 
@@ -384,9 +359,7 @@ const ExerciseManagerModal: React.FC<{
                                 />
                             </div>
 
-                            {/* 3. Logic Input Berdasarkan Tipe */}
                             
-                            {/* A. MATCHING PAIRS INPUT */}
                             {formType === 'matching-pairs' && (
                                 <div className="space-y-2">
                                     <label className="block text-xs font-bold text-gray-500 uppercase">Pasangan Kata</label>
@@ -414,7 +387,6 @@ const ExerciseManagerModal: React.FC<{
                                 </div>
                             )}
 
-                            {/* B. MULTIPLE CHOICE / DRAG DROP */}
                             {(formType === 'multiple-choice' || formType === 'drag-and-drop') && (
                                 <div className="space-y-2">
                                     <label className="block text-xs font-bold text-gray-500 uppercase">
@@ -435,7 +407,6 @@ const ExerciseManagerModal: React.FC<{
                                 </div>
                             )}
 
-                            {/* 4. Jawaban Benar (Kecuali Matching Pairs) */}
                             {formType !== 'matching-pairs' && (
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Kunci Jawaban</label>
@@ -461,7 +432,6 @@ const ExerciseManagerModal: React.FC<{
                         </form>
                     </div>
 
-                    {/* RIGHT: LIST */}
                     <div className="flex-1 bg-white p-6 overflow-y-auto">
                         <div className="flex justify-between items-center mb-4">
                             <h4 className="font-bold text-gray-700">Daftar Soal ({exerciseList.length})</h4>
@@ -507,11 +477,11 @@ const ExerciseManagerModal: React.FC<{
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
-// --- VOCABULARY MANAGEMENT MODAL ---
 const VocabularyManagerModal: React.FC<{
     topic: DBTopic;
     onClose: () => void;
@@ -521,10 +491,8 @@ const VocabularyManagerModal: React.FC<{
     const [editMode, setEditMode] = useState<number | string | null>(null);
     const [formData, setFormData] = useState({ indonesian: '', target_word: '', pinyin: '' });
     
-    // Notification State
     const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
     
-    // Delete Confirmation State
     const [vocabToDelete, setVocabToDelete] = useState<DBVocabulary | null>(null);
 
     const isMandarin = topic.bahasa_id === Language.MANDARIN;
@@ -564,12 +532,10 @@ const VocabularyManagerModal: React.FC<{
         setFormData({ indonesian: '', target_word: '', pinyin: '' });
     };
 
-    // Open Delete Confirmation
     const handleDeleteClick = (vocab: DBVocabulary) => {
         setVocabToDelete(vocab);
     };
 
-    // Execute Delete
     const executeDelete = async () => {
         if (!vocabToDelete || !vocabToDelete.id) return;
         
@@ -607,11 +573,10 @@ const VocabularyManagerModal: React.FC<{
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    return createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden animate-slide-up relative">
                 
-                {/* IN-MODAL NOTIFICATION */}
                 {notification && (
                     <div className={`absolute top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 animate-slide-up ${notification.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
                         {notification.type === 'success' ? <CheckCircleIcon className="w-5 h-5"/> : <XCircleIcon className="w-5 h-5"/>}
@@ -619,7 +584,6 @@ const VocabularyManagerModal: React.FC<{
                     </div>
                 )}
 
-                {/* DELETE CONFIRMATION OVERLAY */}
                 {vocabToDelete && (
                     <div className="absolute inset-0 z-[70] bg-white/90 backdrop-blur-sm flex items-center justify-center p-4 transition-all">
                         <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-2xl max-w-sm w-full text-center transform scale-100 animate-fade-in">
@@ -648,7 +612,6 @@ const VocabularyManagerModal: React.FC<{
                     </div>
                 )}
 
-                {/* Header */}
                 <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                     <div>
                         <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -723,7 +686,6 @@ const VocabularyManagerModal: React.FC<{
                         </form>
                     </div>
 
-                    {/* Right: List */}
                     <div className="flex-1 bg-white p-6 overflow-y-auto">
                         <div className="flex justify-between items-center mb-4">
                             <h4 className="font-bold text-gray-700">Daftar Kosakata ({vocabList.length})</h4>
@@ -770,32 +732,28 @@ const VocabularyManagerModal: React.FC<{
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
 
-// --- USER MANAGEMENT VIEW (CRUD) ---
 const UserManagementView: React.FC = () => {
     const [users, setUsers] = useState<DBUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     
-    // Form Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentUser, setCurrentUser] = useState<Partial<DBUser> | null>(null);
     const [formData, setFormData] = useState({ nama_lengkap: '', email: '', role: 'user', password: '' });
     const [formError, setFormError] = useState('');
 
-    // Delete Modal State
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [userToDelete, setUserToDelete] = useState<DBUser | null>(null);
     
-    // Notification State
     const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
     const showNotification = (message: string, type: 'success' | 'error') => {
         setNotification({ message, type });
-        // Auto hide after 3 seconds
         setTimeout(() => setNotification(null), 3000);
     };
 
@@ -828,19 +786,17 @@ const UserManagementView: React.FC = () => {
             nama_lengkap: user.nama_lengkap, 
             email: user.email, 
             role: user.role || 'user', 
-            password: '' // Password always blank initially on edit
+            password: '' 
         });
         setFormError('');
         setIsModalOpen(true);
     };
 
-    // Open Confirmation Modal
     const handleClickDelete = (user: DBUser) => {
         setUserToDelete(user);
         setIsDeleteModalOpen(true);
     };
 
-    // Execute Delete
     const executeDelete = async () => {
         if (!userToDelete) return;
         
@@ -851,7 +807,7 @@ const UserManagementView: React.FC = () => {
             fetchUsers();
             showNotification('Pengguna berhasil dihapus', 'success');
         } catch (e: any) {
-            setIsDeleteModalOpen(false); // Close modal even on error to show toast
+            setIsDeleteModalOpen(false); 
             showNotification(e.message, 'error');
         }
     };
@@ -862,7 +818,6 @@ const UserManagementView: React.FC = () => {
         
         try {
             if (currentUser && currentUser.id) {
-                // Update
                 await databaseService.updateUser(currentUser.id, {
                     nama_lengkap: formData.nama_lengkap,
                     email: formData.email,
@@ -871,7 +826,6 @@ const UserManagementView: React.FC = () => {
                 });
                 showNotification('Data pengguna berhasil diperbarui', 'success');
             } else {
-                // Create
                 if (!formData.password) {
                     setFormError('Password wajib diisi untuk pengguna baru.');
                     return;
@@ -894,8 +848,7 @@ const UserManagementView: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            {/* Notification Toast */}
-            {notification && (
+            {notification && createPortal(
                 <div className={`fixed top-6 right-6 z-[60] px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 transition-all transform duration-300 animate-slide-up ${notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
                     {notification.type === 'success' ? <CheckCircleIcon className="w-6 h-6" /> : <XCircleIcon className="w-6 h-6" />}
                     <div>
@@ -905,7 +858,8 @@ const UserManagementView: React.FC = () => {
                     <button onClick={() => setNotification(null)} className="ml-4 opacity-70 hover:opacity-100 p-1">
                         <span className="text-xl font-bold">&times;</span>
                     </button>
-                </div>
+                </div>,
+                document.body
             )}
 
             <div className="flex justify-between items-center">
@@ -963,9 +917,8 @@ const UserManagementView: React.FC = () => {
                 </div>
             </div>
 
-            {/* Create/Edit User Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            {isModalOpen && createPortal(
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-md p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-slide-up">
                         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                             <h3 className="text-lg font-bold text-gray-800">
@@ -1042,12 +995,12 @@ const UserManagementView: React.FC = () => {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
-            {/* DELETE CONFIRMATION MODAL */}
-            {isDeleteModalOpen && userToDelete && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            {isDeleteModalOpen && userToDelete && createPortal(
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-slide-up transform transition-all">
                         <div className="p-6 text-center">
                             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1078,19 +1031,17 @@ const UserManagementView: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
 };
 
-// --- COURSE MANAGEMENT VIEW (CRUD) ---
 const CourseManagementView: React.FC = () => {
     const [topics, setTopics] = useState<DBTopic[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeLang, setActiveLang] = useState<Language>(Language.ENGLISH);
-
-    // Form Modal
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentTopic, setCurrentTopic] = useState<DBTopic | null>(null);
     const [formData, setFormData] = useState({
@@ -1098,19 +1049,17 @@ const CourseManagementView: React.FC = () => {
         deskripsi: '',
         urutan: 1,
         xp_reward: 10,
-        icon: '📚'
+        icon: '📚',
+        level: 'Beginner' as TopicLevel 
     });
     const [formError, setFormError] = useState('');
 
-    // Content Modals State
     const [selectedTopicForVocab, setSelectedTopicForVocab] = useState<DBTopic | null>(null);
     const [selectedTopicForExercises, setSelectedTopicForExercises] = useState<DBTopic | null>(null);
 
-    // Delete Modal
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [topicToDelete, setTopicToDelete] = useState<DBTopic | null>(null);
 
-    // Notification
     const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
     const showNotification = (message: string, type: 'success' | 'error') => {
@@ -1134,16 +1083,24 @@ const CourseManagementView: React.FC = () => {
         fetchTopics();
     }, [activeLang]);
 
+    const getNextOrderForLevel = (level: string) => {
+        const levelTopics = topics.filter(t => (t.level || 'Beginner') === level);
+        if (levelTopics.length === 0) return 1;
+        
+        const maxOrder = Math.max(...levelTopics.map(t => t.urutan));
+        return maxOrder + 1;
+    };
+
     const handleOpenAdd = () => {
         setCurrentTopic(null);
-        // Default order = last + 1
-        const nextOrder = topics.length > 0 ? (Math.max(...topics.map(t => t.urutan)) + 1) : 1;
+        const nextOrder = getNextOrderForLevel('Beginner');
         setFormData({
             judul_topik: '',
             deskripsi: '',
             urutan: nextOrder,
             xp_reward: 10,
-            icon: '📚'
+            icon: '📚',
+            level: 'Beginner'
         });
         setFormError('');
         setIsModalOpen(true);
@@ -1156,7 +1113,8 @@ const CourseManagementView: React.FC = () => {
             deskripsi: topic.deskripsi,
             urutan: topic.urutan,
             xp_reward: topic.xp_reward,
-            icon: topic.icon
+            icon: topic.icon,
+            level: topic.level || 'Beginner'
         });
         setFormError('');
         setIsModalOpen(true);
@@ -1166,7 +1124,7 @@ const CourseManagementView: React.FC = () => {
         setTopicToDelete(topic);
         setIsDeleteModalOpen(true);
     };
-
+    
     const executeDelete = async () => {
         if (!topicToDelete) return;
         try {
@@ -1208,9 +1166,26 @@ const CourseManagementView: React.FC = () => {
         }
     };
 
+    const levelPriority: Record<string, number> = {
+        'Beginner': 1,
+        'Intermediate': 2,
+        'Advanced': 3
+    };
+
+    const sortedTopics = [...topics].sort((a, b) => {
+        const levelA = levelPriority[a.level || 'Beginner'] || 99;
+        const levelB = levelPriority[b.level || 'Beginner'] || 99;
+        
+        if (levelA !== levelB) {
+            return levelA - levelB;
+        }
+        return a.urutan - b.urutan;
+    });
+
+
     return (
         <div className="space-y-6">
-            {notification && (
+            {notification && createPortal(
                 <div className={`fixed top-6 right-6 z-[60] px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 transition-all transform duration-300 animate-slide-up ${notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
                     {notification.type === 'success' ? <CheckCircleIcon className="w-6 h-6" /> : <XCircleIcon className="w-6 h-6" />}
                     <div>
@@ -1220,7 +1195,8 @@ const CourseManagementView: React.FC = () => {
                     <button onClick={() => setNotification(null)} className="ml-4 opacity-70 hover:opacity-100 p-1">
                         <span className="text-xl font-bold">&times;</span>
                     </button>
-                </div>
+                </div>,
+                document.body
             )}
 
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1228,20 +1204,20 @@ const CourseManagementView: React.FC = () => {
                 <div className="flex bg-gray-200 p-1 rounded-lg">
                     <button 
                         onClick={() => setActiveLang(Language.ENGLISH)}
-                        className={`px-4 py-1.5 rounded-md text-sm font-bold transition-colors ${activeLang === Language.ENGLISH ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-2 transition-colors ${activeLang === Language.ENGLISH ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
-                        Inggris 🇬🇧
+                        Inggris <UKFlag className="w-4 h-3 rounded-[1px]" />
                     </button>
                     <button 
                          onClick={() => setActiveLang(Language.MANDARIN)}
-                         className={`px-4 py-1.5 rounded-md text-sm font-bold transition-colors ${activeLang === Language.MANDARIN ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                         className={`px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-2 transition-colors ${activeLang === Language.MANDARIN ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
-                        Mandarin 🇨🇳
+                        Mandarin <ChinaFlag className="w-4 h-3 rounded-[1px]" />
                     </button>
                 </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-3">
                 <button 
                     onClick={handleOpenAdd}
                     className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors shadow-sm"
@@ -1259,6 +1235,7 @@ const CourseManagementView: React.FC = () => {
                                 <th className="px-6 py-4 w-16">Urutan</th>
                                 <th className="px-6 py-4 w-16">Icon</th>
                                 <th className="px-6 py-4">Judul Topik</th>
+                                <th className="px-6 py-4">Level</th> {/* New Column */}
                                 <th className="px-6 py-4">Deskripsi Singkat</th>
                                 <th className="px-6 py-4 w-24">XP</th>
                                 <th className="px-6 py-4 text-center w-40">Aksi</th>
@@ -1266,15 +1243,23 @@ const CourseManagementView: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {isLoading ? (
-                                <tr><td colSpan={6} className="p-8 text-center">Memuat...</td></tr>
-                            ) : topics.length === 0 ? (
-                                <tr><td colSpan={6} className="p-8 text-center">Belum ada topik untuk bahasa ini.</td></tr>
+                                <tr><td colSpan={7} className="p-8 text-center">Memuat...</td></tr>
+                            ) : sortedTopics.length === 0 ? (
+                                <tr><td colSpan={7} className="p-8 text-center">Belum ada topik untuk bahasa ini.</td></tr>
                             ) : (
-                                topics.map(topic => (
+                                sortedTopics.map(topic => (
                                     <tr key={topic.id} className="hover:bg-gray-50">
                                         <td className="px-6 py-3 font-mono font-bold text-gray-400">#{topic.urutan}</td>
                                         <td className="px-6 py-3 text-2xl">{topic.icon}</td>
                                         <td className="px-6 py-3 font-bold text-gray-800">{topic.judul_topik}</td>
+                                        <td className="px-6 py-3">
+                                            <span className={`px-2 py-1 text-xs rounded-full font-bold
+                                                ${topic.level === 'Beginner' ? 'bg-green-100 text-green-700' : 
+                                                  topic.level === 'Intermediate' ? 'bg-blue-100 text-blue-700' : 
+                                                  'bg-purple-100 text-purple-700'}`}>
+                                                {topic.level || 'Beginner'}
+                                            </span>
+                                        </td>
                                         <td className="px-6 py-3 text-gray-500 truncate max-w-xs">{topic.deskripsi}</td>
                                         <td className="px-6 py-3 font-bold text-yellow-600">{topic.xp_reward}</td>
                                         <td className="px-6 py-3 flex justify-center gap-2">
@@ -1299,9 +1284,8 @@ const CourseManagementView: React.FC = () => {
                 </div>
             </div>
 
-            {/* Modal Form Topik */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            {isModalOpen && createPortal(
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-md p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-slide-up">
                         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                             <h3 className="text-lg font-bold text-gray-800">
@@ -1341,6 +1325,26 @@ const CourseManagementView: React.FC = () => {
                             </div>
                             
                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Level Kesulitan</label>
+                                <select 
+                                    className="w-full px-4 py-2 border rounded-lg focus:ring-green-500 focus:border-green-500"
+                                    value={formData.level}
+                                    onChange={(e) => {
+                                        const newLevel = e.target.value as TopicLevel;
+                                        setFormData(prev => ({
+                                            ...prev, 
+                                            level: newLevel,
+                                            urutan: !currentTopic ? getNextOrderForLevel(newLevel) : prev.urutan
+                                        }));
+                                    }}
+                                >
+                                    <option value="Beginner">Beginner (Pemula)</option>
+                                    <option value="Intermediate">Intermediate (Menengah)</option>
+                                    <option value="Advanced">Advanced (Mahir)</option>
+                                </select>
+                            </div>
+                            
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi Singkat</label>
                                 <textarea 
                                     required rows={2}
@@ -1360,6 +1364,9 @@ const CourseManagementView: React.FC = () => {
                                         value={formData.urutan}
                                         onChange={e => setFormData({...formData, urutan: parseInt(e.target.value)})}
                                     />
+                                    {!currentTopic && (
+                                        <p className="text-xs text-gray-500 mt-1">Otomatis diisi urutan terakhir + 1</p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">XP Reward</label>
@@ -1378,10 +1385,10 @@ const CourseManagementView: React.FC = () => {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
-            {/* Vocabulary Modal */}
             {selectedTopicForVocab && (
                 <VocabularyManagerModal 
                     topic={selectedTopicForVocab} 
@@ -1389,7 +1396,6 @@ const CourseManagementView: React.FC = () => {
                 />
             )}
 
-            {/* Exercise Modal */}
             {selectedTopicForExercises && (
                 <ExerciseManagerModal 
                     topic={selectedTopicForExercises} 
@@ -1397,9 +1403,8 @@ const CourseManagementView: React.FC = () => {
                 />
             )}
 
-            {/* Delete Modal */}
-            {isDeleteModalOpen && topicToDelete && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            {isDeleteModalOpen && topicToDelete && createPortal(
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-slide-up">
                          <div className="p-6 text-center">
                             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1420,7 +1425,8 @@ const CourseManagementView: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
@@ -1436,7 +1442,7 @@ const DashboardOverview: React.FC<{
         <div className="space-y-8 animate-fade-in">
              {/* 1. Stat Cards Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow min-w-0">
                     <div>
                         <p className="text-gray-500 text-sm font-medium">Total Pengguna</p>
                         <h3 className="text-3xl font-extrabold text-gray-900 mt-1">{loadingData ? '-' : stats.totalUsers}</h3>
@@ -1446,32 +1452,30 @@ const DashboardOverview: React.FC<{
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow min-w-0">
                     <div>
                          <p className="text-gray-500 text-sm font-medium">Topik Bahasa Inggris</p>
                          <h3 className="text-3xl font-extrabold text-gray-900 mt-1">{loadingData ? '-' : stats.totalEnglishTopics}</h3>
                     </div>
                     <div className="p-4 bg-red-50 rounded-full">
-                        <span className="text-2xl">🇬🇧</span>
+                        <UKFlag className="w-8 h-6 rounded shadow-sm" />
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow min-w-0">
                     <div>
                         <p className="text-gray-500 text-sm font-medium">Topik Bahasa Mandarin</p>
                         <h3 className="text-3xl font-extrabold text-gray-900 mt-1">{loadingData ? '-' : stats.totalMandarinTopics}</h3>
                     </div>
                     <div className="p-4 bg-yellow-50 rounded-full">
-                         <span className="text-2xl">🇨🇳</span>
+                         <ChinaFlag className="w-8 h-6 rounded shadow-sm" />
                     </div>
                 </div>
             </div>
 
             {/* 2. Main Content: Table & Donut Chart */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* Left Column: Recent Users Table (Takes 2/3 width) */}
-                <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col min-w-0">
                     <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
                         <h3 className="font-bold text-gray-800">Aktivitas Terbaru</h3>
                     </div>
@@ -1482,17 +1486,16 @@ const DashboardOverview: React.FC<{
                                     <th className="px-6 py-3">Nama</th>
                                     <th className="px-6 py-3">Email</th>
                                     <th className="px-6 py-3">Status</th>
-                                    <th className="px-6 py-3">Terakhir Login</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                {loadingData ? (
                                    <tr>
-                                       <td colSpan={4} className="px-6 py-8 text-center text-gray-400">Memuat data pengguna...</td>
+                                       <td colSpan={3} className="px-6 py-8 text-center text-gray-400">Memuat data pengguna...</td>
                                    </tr>
                                ) : recentUsers.length === 0 ? (
                                    <tr>
-                                       <td colSpan={4} className="px-6 py-8 text-center text-gray-400">Belum ada pengguna terdaftar.</td>
+                                       <td colSpan={3} className="px-6 py-8 text-center text-gray-400">Belum ada pengguna terdaftar.</td>
                                    </tr>
                                ) : (
                                    recentUsers.map((usr) => {
@@ -1511,7 +1514,6 @@ const DashboardOverview: React.FC<{
                                                     {status.label}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-3">{formatDate(usr.last_login)}</td>
                                         </tr>
                                        );
                                    })
@@ -1521,8 +1523,7 @@ const DashboardOverview: React.FC<{
                     </div>
                 </div>
 
-                {/* Right Column: Topic Distribution (Donut) (Takes 1/3 width) */}
-                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm h-fit">
+                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm h-fit min-w-0">
                     <h3 className="font-bold text-gray-800 mb-6 text-center">Distribusi Konten</h3>
                     <DonutChart 
                         english={stats.totalEnglishTopics} 
@@ -1542,6 +1543,7 @@ const AdminDashboardPage: React.FC = () => {
   
   // View State
   const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'courses'>('dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Dashboard specific States
   const [stats, setStats] = useState({
@@ -1569,7 +1571,6 @@ const AdminDashboardPage: React.FC = () => {
       }
     };
     
-    // Only fetch overview stats if we are on dashboard tab or init
     if (user?.role === 'admin' && activeTab === 'dashboard') {
       fetchAdminData();
     }
@@ -1588,19 +1589,40 @@ const AdminDashboardPage: React.FC = () => {
 
   return (
     <div className="flex min-h-screen bg-gray-50 font-sans">
-      {/* Sidebar (Fixed Width) */}
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
+      {/* Mobile Sidebar Overlay */}
+      {mobileMenuOpen && (
+          <div 
+            className="fixed inset-0 z-30 bg-black/50 md:hidden backdrop-blur-sm" 
+            onClick={() => setMobileMenuOpen(false)}
+          />
+      )}
 
-      {/* Main Content (Offset by Sidebar Width) */}
-      <div className="flex-1 ml-64 flex flex-col">
+      {/* Sidebar (Responsive) */}
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        onLogout={handleLogout} 
+        isOpen={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+      />
+
+      <div className="flex-1 flex flex-col min-w-0 md:ml-64 transition-all duration-300">
         
-        {/* Topbar */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 sticky top-0 z-10 shadow-sm">
-            <h2 className="text-xl font-bold text-gray-800 capitalize">
-                {activeTab === 'dashboard' && 'Overview'}
-                {activeTab === 'users' && 'Manajemen Pengguna'}
-                {activeTab === 'courses' && 'Manajemen Topik'}
-            </h2>
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-8 sticky top-0 z-10 shadow-sm">
+            <div className="flex items-center gap-4">
+                <button 
+                    onClick={() => setMobileMenuOpen(true)}
+                    className="md:hidden text-gray-500 hover:text-gray-800 p-1"
+                >
+                    <Bars3Icon className="w-6 h-6" />
+                </button>
+                <h2 className="text-lg md:text-xl font-bold text-gray-800 capitalize truncate">
+                    {activeTab === 'dashboard' && 'Overview'}
+                    {activeTab === 'users' && 'Manajemen Pengguna'}
+                    {activeTab === 'courses' && 'Manajemen Topik'}
+                </h2>
+            </div>
+            
             <div className="flex items-center gap-4">
                 <div className="text-right hidden sm:block">
                     <p className="text-sm font-bold text-gray-700">{user.nama_lengkap}</p>
@@ -1612,8 +1634,7 @@ const AdminDashboardPage: React.FC = () => {
             </div>
         </header>
 
-        {/* Scrollable Content */}
-        <main className="flex-1 p-8 overflow-y-auto">
+        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
             {activeTab === 'dashboard' && (
                 <DashboardOverview stats={stats} recentUsers={recentUsers} loadingData={loadingData} />
             )}

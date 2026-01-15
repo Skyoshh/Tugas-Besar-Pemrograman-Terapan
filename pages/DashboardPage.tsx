@@ -1,22 +1,22 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useUser } from '../hooks/useUser';
-import { DBTopic, DBUserProgress } from '../types';
+import { DBTopic, DBUserProgress, TopicLevel } from '../types';
 import { CheckCircleIcon, StarIcon } from '../components/icons';
+import { UKFlag, ChinaFlag } from '../components/Flags';
 import { databaseService } from '../services/database';
+import ProgressBar from '../components/ProgressBar';
 
-// KONSTANTA LAYOUT
-const VERTICAL_SPACING = 140; // Jarak vertikal antar node
-const NODE_OFFSET_TOP = 48;   // Titik tengah vertikal lingkaran (Setengah dari h-24 / 96px = 48px)
+const VERTICAL_SPACING = 140; 
+const NODE_OFFSET_TOP = 48;   
 
-const LessonNode: React.FC<{ lesson: DBTopic; isCompleted: boolean; isUnlocked: boolean; index: number; total: number }> = ({ lesson, isCompleted, isUnlocked, index, total }) => {
-  // Logic untuk posisi zig-zag yang sinkron dengan SVG
+const LessonNode: React.FC<{ lesson: DBTopic; isCompleted: boolean; isUnlocked: boolean; index: number }> = ({ lesson, isCompleted, isUnlocked, index }) => {
   const getPositionStyle = (i: number) => {
     const cycle = i % 4;
-    let left = '50%'; // Center (Cycle 0 & 2)
-    if (cycle === 1) left = '25%'; // Kiri
-    if (cycle === 3) left = '75%'; // Kanan
+    let left = '50%'; 
+    if (cycle === 1) left = '25%'; 
+    if (cycle === 3) left = '75%'; 
     
     return { left, top: `${i * VERTICAL_SPACING}px` };
   };
@@ -35,7 +35,6 @@ const LessonNode: React.FC<{ lesson: DBTopic; isCompleted: boolean; isUnlocked: 
         `}>
           <div className="text-4xl drop-shadow-md select-none">{lesson.icon}</div>
           
-          {/* Progress Ring / Checkmark */}
           {isCompleted && (
              <div className="absolute -top-2 -right-2 bg-yellow-400 rounded-full p-1 border-2 border-white shadow-sm">
                 <CheckCircleIcon className="w-6 h-6 text-white" />
@@ -67,6 +66,101 @@ const LessonNode: React.FC<{ lesson: DBTopic; isCompleted: boolean; isUnlocked: 
   );
 };
 
+const LevelSection: React.FC<{
+    level: string;
+    topics: DBTopic[];
+    completedLessonIds: string[];
+    isPreviousLevelCompleted: boolean;
+}> = ({ level, topics, completedLessonIds, isPreviousLevelCompleted }) => {
+    
+    const generatePath = () => {
+        if (topics.length === 0) return "";
+        
+        let currentX = 100;
+        let currentY = NODE_OFFSET_TOP; 
+
+        let path = `M ${currentX} ${currentY} `;
+
+        topics.forEach((_, i) => {
+            if (i === topics.length - 1) return; 
+            const nextIndex = i + 1;
+            
+            const cycle = nextIndex % 4;
+            let nextX = 100;
+            if (cycle === 1) nextX = 50;  
+            if (cycle === 3) nextX = 150; 
+            
+            const nextY = (nextIndex * VERTICAL_SPACING) + NODE_OFFSET_TOP;
+
+            const c1x = currentX;
+            const c1y = currentY + (VERTICAL_SPACING / 2);
+
+            const c2x = nextX;
+            const c2y = nextY - (VERTICAL_SPACING / 2);
+
+            path += `C ${c1x} ${c1y}, ${c2x} ${c2y}, ${nextX} ${nextY} `;
+            
+            currentX = nextX;
+            currentY = nextY;
+        });
+
+        return path;
+    };
+
+    const pathD = generatePath();
+    const containerHeight = (topics.length * VERTICAL_SPACING) + 40;
+
+    const headerColors: Record<string, string> = {
+        'Beginner': 'bg-green-100 text-green-800 border-green-200',
+        'Intermediate': 'bg-blue-100 text-blue-800 border-blue-200',
+        'Advanced': 'bg-purple-100 text-purple-800 border-purple-200'
+    };
+
+    return (
+        <div className="mb-8">
+            <div className={`py-4 px-6 mb-8 rounded-xl border-2 text-center shadow-sm ${headerColors[level] || 'bg-gray-100'}`}>
+                <h2 className="text-xl font-extrabold uppercase tracking-wider">{level}</h2>
+            </div>
+
+            <div className="relative w-full max-w-md mx-auto" style={{ height: `${containerHeight}px` }}>
+                <svg 
+                    className="absolute top-0 left-0 w-full h-full z-0 overflow-visible"
+                    viewBox={`0 0 200 ${containerHeight}`} 
+                    preserveAspectRatio="none" 
+                >
+                    <path d={pathD} stroke="#e5e7eb" strokeWidth="12" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d={pathD} stroke="#fbbf24" strokeWidth="0" fill="none" strokeLinecap="round" strokeDasharray="10 10" />
+                </svg>
+
+                {topics.map((lesson, index) => {
+                    const isCompleted = completedLessonIds.includes(lesson.id);
+                    
+                    let isUnlocked = false;
+
+                    if (index === 0) {
+                        isUnlocked = isPreviousLevelCompleted;
+                    } else {
+                        isUnlocked = completedLessonIds.includes(topics[index-1]?.id);
+                    }
+
+                    if (isCompleted) {
+                        isUnlocked = true;
+                    }
+
+                    return (
+                        <LessonNode 
+                            key={lesson.id} 
+                            lesson={lesson} 
+                            isCompleted={isCompleted} 
+                            isUnlocked={isUnlocked} 
+                            index={index} 
+                        />
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
 
 const DashboardPage: React.FC = () => {
   const { user, isLoading } = useUser();
@@ -76,28 +170,43 @@ const DashboardPage: React.FC = () => {
   
   const { learning_language } = user || {};
 
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchData = useCallback(async () => {
         if (learning_language && user?.id) {
             setLoadingData(true);
-            const [fetchedTopics, fetchedProgress] = await Promise.all([
-                databaseService.getTopicsByLanguage(learning_language),
-                databaseService.getUserProgress(user.id)
-            ]);
-            setTopics(fetchedTopics);
-            setProgress(fetchedProgress);
-            setLoadingData(false);
+            try {
+                const [fetchedTopics, fetchedProgress] = await Promise.all([
+                    databaseService.getTopicsByLanguage(learning_language),
+                    databaseService.getUserProgress(user.id)
+                ]);
+                setTopics(fetchedTopics);
+                setProgress(fetchedProgress);
+            } catch (error) {
+                console.error("Failed to fetch dashboard data:", error);
+            } finally {
+                setLoadingData(false);
+            }
         }
-    };
+  }, [learning_language, user?.id]);
+
+  useEffect(() => {
     if (user && user.role !== 'admin') {
        fetchData();
     }
-  }, [learning_language, user]);
+  }, [fetchData, user]);
+
+  useEffect(() => {
+    const onFocus = () => {
+        if (user && user.role !== 'admin') {
+            fetchData();
+        }
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchData, user]);
 
   if (isLoading) return <div className="p-8 text-center">Memuat Pengguna...</div>;
   if (!user) return <Navigate to="/auth" />;
   
-  // REDIRECT ADMIN: Admin tidak boleh di halaman belajar user biasa
   if (user.role === 'admin') {
       return <Navigate to="/admin" />;
   }
@@ -106,120 +215,79 @@ const DashboardPage: React.FC = () => {
     return <Navigate to="/select-language" />;
   }
 
-  if (loadingData) return <div className="p-8 text-center">Menyiapkan kurikulum...</div>;
+  if (loadingData && topics.length === 0) return <div className="p-8 text-center">Menyiapkan kurikulum...</div>;
 
-  // Generate SVG Path dynamically based on number of topics
-  // Pindahkan logika path ke bawah setelah check data
-  const generatePath = () => {
-    if (topics.length === 0) return "";
-    
-    // Kita menggunakan koordinat SVG tetap: Lebar 200 unit.
-    // Center = 100, Kiri = 50, Kanan = 150.
-    
-    // Tentukan titik awal (Topik pertama selalu di tengah/100)
-    let currentX = 100;
-    let currentY = NODE_OFFSET_TOP; // Titik tengah lingkaran pertama
+  const completedLessonIds = progress.map(p => p.topik_id);
+  const completedCount = progress.filter(p => p.status === 'completed').length;
+  const totalTopics = topics.length;
+  const coursePercentage = totalTopics > 0 ? (completedCount / totalTopics) * 100 : 0;
 
-    let path = `M ${currentX} ${currentY} `;
-
-    topics.forEach((_, i) => {
-        if (i === topics.length - 1) return; // Stop drawing after reaching last node
-
-        const nextIndex = i + 1;
-        
-        // Tentukan posisi X target berikutnya (Sesuai logika CSS Zig-zag)
-        const cycle = nextIndex % 4;
-        let nextX = 100;
-        if (cycle === 1) nextX = 50;  // 25% dari 200 (Matches left: 25%)
-        if (cycle === 3) nextX = 150; // 75% dari 200 (Matches left: 75%)
-        
-        // Tentukan posisi Y target berikutnya
-        const nextY = (nextIndex * VERTICAL_SPACING) + NODE_OFFSET_TOP;
-
-        // Bezier curve control points
-        // Control point 1: Turun ke bawah dari titik sekarang
-        const c1x = currentX;
-        const c1y = currentY + (VERTICAL_SPACING / 2);
-
-        // Control point 2: Naik ke atas dari titik target
-        const c2x = nextX;
-        const c2y = nextY - (VERTICAL_SPACING / 2);
-
-        path += `C ${c1x} ${c1y}, ${c2x} ${c2y}, ${nextX} ${nextY} `;
-        
-        currentX = nextX;
-        currentY = nextY;
-    });
-
-    return path;
+  const levels: TopicLevel[] = ['Beginner', 'Intermediate', 'Advanced'];
+  
+  const normalizeLevel = (l: string): string => {
+      if (!l) return 'Beginner';
+      return l.charAt(0).toUpperCase() + l.slice(1).toLowerCase();
   };
 
-  const pathD = generatePath();
-  const completedLessonIds = progress.map(p => p.topik_id);
-  const containerHeight = (topics.length * VERTICAL_SPACING) + 100; 
+  const isLevelCompleted = (levelName: string) => {
+      const levelTopics = topics.filter(t => normalizeLevel(t.level || 'Beginner') === levelName);
+      if (levelTopics.length === 0) return true; 
+      return levelTopics.every(t => completedLessonIds.includes(t.id));
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 min-h-screen bg-green-50">
-      <div className="text-center mb-8">
+      <div className="text-center mb-4">
         <h1 className="text-3xl font-extrabold text-gray-800 mb-2">Jalur Belajar</h1>
-        <p className="text-gray-600 bg-white inline-block px-4 py-1 rounded-full text-sm font-semibold shadow-sm border border-gray-200">
-           {user.learning_language === 'ENGLISH' ? '🇬🇧 Bahasa Inggris' : '🇨🇳 Bahasa Mandarin'}
-        </p>
+        <div className="inline-flex items-center gap-2 bg-white px-4 py-1.5 rounded-full text-sm font-semibold shadow-sm border border-gray-200 text-gray-700">
+           {user.learning_language === 'ENGLISH' 
+             ? <><UKFlag className="w-5 h-3.5 rounded-[1px] object-cover" /> <span>Bahasa Inggris</span></> 
+             : <><ChinaFlag className="w-5 h-3.5 rounded-[1px] object-cover" /> <span>Bahasa Mandarin</span></>
+           }
+        </div>
       </div>
 
-      {/* Container utama untuk Path dan Node */}
-      <div className="relative w-full max-w-md mx-auto" style={{ height: `${containerHeight}px` }}>
-        
-        {/* SVG Layer: Z-index 0 agar di belakang tombol */}
-        {/* 
-            CRITICAL FIX: preserveAspectRatio="none"
-            Ini memaksa SVG untuk meregang (stretch) sepenuhnya mengikuti lebar dan tinggi container.
-            Ini memastikan bahwa koordinat X=50 di SVG selalu sejajar dengan elemen CSS left:25%,
-            tidak peduli berapa lebar layarnya.
-        */}
-        <svg 
-            className="absolute top-0 left-0 w-full h-full z-0 overflow-visible"
-            viewBox={`0 0 200 ${containerHeight}`} 
-            preserveAspectRatio="none" 
-        >
-          {/* Garis Abu-abu (Jalur Background) */}
-          <path 
-            d={pathD} 
-            stroke="#e5e7eb" 
-            strokeWidth="12" 
-            fill="none" 
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          {/* Garis Kuning Putus-putus (Indikator arah) */}
-           <path 
-            d={pathD} 
-            stroke="#fbbf24" 
-            strokeWidth="0" 
-            fill="none" 
-            strokeLinecap="round"
-            strokeDasharray="10 10"
-          />
-        </svg>
+      <div className="max-w-md mx-auto mb-12">
+        <ProgressBar percentage={coursePercentage} showLabel height="h-6" />
+      </div>
 
-        {/* Nodes Layer */}
-        {topics.map((lesson, index) => {
-          const isCompleted = completedLessonIds.includes(lesson.id);
-          const isUnlocked = index === 0 || completedLessonIds.includes(topics[index-1]?.id);
-          return (
-            <LessonNode 
-                key={lesson.id} 
-                lesson={lesson} 
-                isCompleted={isCompleted} 
-                isUnlocked={isUnlocked} 
-                index={index} 
-                total={topics.length}
-            />
-          );
+      <div className="max-w-md mx-auto">
+        {levels.map((level, idx) => {
+            const levelTopics = topics
+                .filter(t => normalizeLevel(t.level || 'Beginner') === level)
+                .sort((a, b) => a.urutan - b.urutan);
+
+            if (levelTopics.length === 0) return null;
+
+            let isPrevDone = true;
+            if (idx > 0) {
+                for (let k = 0; k < idx; k++) {
+                    if (!isLevelCompleted(levels[k])) {
+                        isPrevDone = false;
+                        break;
+                    }
+                }
+            }
+
+            return (
+                <LevelSection 
+                    key={level}
+                    level={level}
+                    topics={levelTopics}
+                    completedLessonIds={completedLessonIds}
+                    isPreviousLevelCompleted={isPrevDone}
+                />
+            );
         })}
+        
+        {topics.length === 0 && !loadingData && (
+             <div className="text-center py-12 text-gray-500">
+                 Belum ada topik tersedia untuk bahasa ini.
+             </div>
+        )}
       </div>
       
-      <div className="h-24"></div> {/* Bottom spacer */}
+      <div className="h-24"></div> 
     </div>
   );
 };

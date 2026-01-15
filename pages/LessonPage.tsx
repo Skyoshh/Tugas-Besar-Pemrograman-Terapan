@@ -5,6 +5,7 @@ import { useUser } from '../hooks/useUser';
 import { Language, DBTopic, DBVocabulary, DBExercise } from '../types';
 import { SpeakerWaveIcon, CheckCircleIcon, XCircleIcon } from '../components/icons';
 import { databaseService } from '../services/database';
+import ProgressBar from '../components/ProgressBar';
 
 enum LessonStep {
   VOCABULARY,
@@ -12,7 +13,6 @@ enum LessonStep {
   COMPLETE,
 }
 
-// Helper function to shuffle array
 const shuffleArray = (array: any[]) => {
     const newArray = [...array];
     for (let i = newArray.length - 1; i > 0; i--) {
@@ -22,7 +22,6 @@ const shuffleArray = (array: any[]) => {
     return newArray;
 };
 
-// Helper component
 const VocabCard: React.FC<{ vocab: DBVocabulary, targetLang: Language, onPronounce: (text: string, langCode: string) => void }> = ({ vocab, targetLang, onPronounce }) => {
     const isEnglish = targetLang === Language.ENGLISH;
     const langCode = isEnglish ? 'en-US' : 'zh-CN';
@@ -40,9 +39,8 @@ const VocabCard: React.FC<{ vocab: DBVocabulary, targetLang: Language, onPronoun
     );
 };
 
-// Types for Matching Game
 interface MatchItem {
-    id: string; // Unique pair identifier (e.g., '1')
+    id: string; 
     text: string;
     side: 'left' | 'right';
 }
@@ -52,35 +50,29 @@ const LessonPage: React.FC = () => {
     const navigate = useNavigate();
     const { user, completeLesson } = useUser();
     
-    // Data State
     const [lessonData, setLessonData] = useState<{vocab: DBVocabulary[], exercises: DBExercise[]} | null>(null);
     const [currentTopic, setCurrentTopic] = useState<DBTopic | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Flow State
     const [step, setStep] = useState<LessonStep>(LessonStep.VOCABULARY);
     const [currentVocabIndex, setCurrentVocabIndex] = useState(0);
     const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
     
-    // Quiz State (Generic)
     const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
     const [correctAnswers, setCorrectAnswers] = useState(0);
 
-    // Specific State for Multiple Choice / Fill Blank
     const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
 
-    // Specific State for Drag and Drop
     const [dragAvailableWords, setDragAvailableWords] = useState<{id: number, text: string}[]>([]);
     const [dragSelectedWords, setDragSelectedWords] = useState<{id: number, text: string}[]>([]);
+    const [isDraggingOverTarget, setIsDraggingOverTarget] = useState(false); // Visual feedback
 
-    // Specific State for Matching Pairs
     const [matchLeftItems, setMatchLeftItems] = useState<MatchItem[]>([]);
     const [matchRightItems, setMatchRightItems] = useState<MatchItem[]>([]);
     const [matchSelected, setMatchSelected] = useState<MatchItem | null>(null); // Currently selected item
     const [matchedPairs, setMatchedPairs] = useState<string[]>([]); // List of matched IDs
     const [matchErrorPair, setMatchErrorPair] = useState<{left: MatchItem, right: MatchItem} | null>(null);
 
-    // SVG Line State
     const containerRef = useRef<HTMLDivElement>(null);
     const itemsRef = useRef<Map<string, HTMLButtonElement>>(new Map());
     const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
@@ -91,12 +83,10 @@ const LessonPage: React.FC = () => {
             if (!lessonId || !user?.learning_language) return;
             setLoading(true);
             try {
-                // Fetch topic detail to get XP reward
                 const allTopics = await databaseService.getTopicsByLanguage(user.learning_language);
                 const topic = allTopics.find(t => t.id === lessonId);
                 setCurrentTopic(topic || null);
 
-                // Fetch lesson content
                 const data = await databaseService.getLessonData(lessonId);
                 setLessonData(data);
             } catch (error) {
@@ -115,7 +105,6 @@ const LessonPage: React.FC = () => {
     }, []);
 
     const handleStartQuiz = () => {
-         // Jika soal kosong (0 exercises), auto complete dengan skor 100 (bonus)
         if (lessonData && lessonData.exercises.length === 0 && currentTopic) {
              completeLesson(currentTopic.id, currentTopic.xp_reward, 100);
              setStep(LessonStep.COMPLETE);
@@ -124,10 +113,8 @@ const LessonPage: React.FC = () => {
         setStep(LessonStep.QUIZ);
     }
 
-    // Reset state saat berganti soal
     const currentQuestion = lessonData?.exercises[currentQuizIndex];
     
-    // Calculate Positions for Lines
     const calculatePositions = useCallback(() => {
         if (!containerRef.current) return;
         const containerRect = containerRef.current.getBoundingClientRect();
@@ -138,7 +125,6 @@ const LessonPage: React.FC = () => {
                 const rect = node.getBoundingClientRect();
                 const isLeft = key.startsWith('left-');
                 
-                // Anchor point: Right side for left items, Left side for right items
                 positions[key] = {
                     x: isLeft 
                         ? rect.right - containerRect.left 
@@ -148,12 +134,9 @@ const LessonPage: React.FC = () => {
             }
         });
         setItemPositions(positions);
-    }, [matchLeftItems, matchRightItems]); // Recalculate when items change/shuffle
-
-    // Update positions on window resize or when items change
+    }, [matchLeftItems, matchRightItems]); 
     useEffect(() => {
         window.addEventListener('resize', calculatePositions);
-        // Delay calculation slightly to ensure DOM is rendered with new items
         const timer = setTimeout(calculatePositions, 100);
         return () => {
             window.removeEventListener('resize', calculatePositions);
@@ -166,7 +149,6 @@ const LessonPage: React.FC = () => {
             setSelectedAnswer(null);
             setIsCorrect(null);
             
-            // Setup Drag and Drop
             if (currentQuestion.tipe_latihan === 'drag-and-drop') {
                 const words = shuffleArray([...currentQuestion.opsi_jawaban]).map((word, idx) => ({
                     id: idx,
@@ -176,9 +158,7 @@ const LessonPage: React.FC = () => {
                 setDragSelectedWords([]);
             }
 
-            // Setup Matching Pairs
             if (currentQuestion.tipe_latihan === 'matching-pairs') {
-                // Clear refs and state to prevent stale data
                 itemsRef.current.clear();
                 setMatchedPairs([]);
                 setMatchSelected(null);
@@ -187,7 +167,6 @@ const LessonPage: React.FC = () => {
                 const lefts: MatchItem[] = [];
                 const rights: MatchItem[] = [];
                 
-                // Parse "Left|Right" strings
                 currentQuestion.opsi_jawaban.forEach((pairStr, idx) => {
                     const [leftTxt, rightTxt] = pairStr.split('|');
                     const pairId = idx.toString();
@@ -197,18 +176,14 @@ const LessonPage: React.FC = () => {
                     }
                 });
 
-                // Set items once per question change
                 setMatchLeftItems(shuffleArray(lefts));
                 setMatchRightItems(shuffleArray(rights));
                 
-                // Note: Position calculation is handled by the other useEffect listening to calculatePositions/items change
             }
         }
-        // IMPORTANT: calculatePositions is intentionally removed from dependencies to prevent infinite loop
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+
     }, [currentQuestion]);
 
-    // Track mouse for drawing line
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         if (containerRef.current && matchSelected) {
             const rect = containerRef.current.getBoundingClientRect();
@@ -267,8 +242,7 @@ const LessonPage: React.FC = () => {
         }, 1500);
     };
 
-    // --- Logic Handler: Drag and Drop ---
-    const handleWordClick = (wordObj: {id: number, text: string}, from: 'available' | 'selected') => {
+    const handleWordMove = (wordObj: {id: number, text: string}, from: 'available' | 'selected') => {
         if (isCorrect !== null) return; 
 
         if (from === 'available') {
@@ -280,17 +254,50 @@ const LessonPage: React.FC = () => {
         }
     };
 
-    // --- Logic Handler: Matching Pairs ---
+    const handleDragStart = (e: React.DragEvent, word: {id: number, text: string}, from: 'available' | 'selected') => {
+        if (isCorrect !== null) {
+            e.preventDefault();
+            return;
+        }
+        e.dataTransfer.setData('application/json', JSON.stringify({ word, from }));
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleDragOver = (e: React.DragEvent, targetZone: 'available' | 'selected') => {
+        e.preventDefault(); 
+        if (targetZone === 'selected') setIsDraggingOverTarget(true);
+    };
+
+    const handleDragLeave = (targetZone: 'available' | 'selected') => {
+        if (targetZone === 'selected') setIsDraggingOverTarget(false);
+    };
+
+    const handleDrop = (e: React.DragEvent, targetZone: 'available' | 'selected') => {
+        e.preventDefault();
+        setIsDraggingOverTarget(false);
+        const data = e.dataTransfer.getData('application/json');
+        
+        if (!data) return;
+
+        try {
+            const { word, from } = JSON.parse(data);
+            if (from === targetZone) return; 
+            handleWordMove(word, from);
+        } catch (err) {
+            console.error("Drop error", err);
+        }
+    };
+
+
     const handleMatchClick = (item: MatchItem) => {
-        if (isCorrect !== null) return; // Prevent click during checking
-        if (matchedPairs.includes(item.id)) return; // Already matched
+        if (isCorrect !== null) return; 
+        if (matchedPairs.includes(item.id)) return; 
         if (matchErrorPair) {
             setMatchErrorPair(null); 
             setMatchSelected(item);
             return;
         }
 
-        // Set initial cursor pos for visual smoothness
         if (containerRef.current) {
             const key = `${item.side}-${item.id}`;
             const pos = itemPositions[key];
@@ -298,21 +305,15 @@ const LessonPage: React.FC = () => {
         }
 
         if (!matchSelected) {
-            // First item selected
             setMatchSelected(item);
         } else {
-            // Second item clicked
             if (matchSelected.side === item.side) {
-                // Same side clicked? Change selection
                 setMatchSelected(item);
             } else {
-                // Different side -> Check Match
                 if (matchSelected.id === item.id) {
-                    // Match!
                     setMatchedPairs(prev => [...prev, item.id]);
                     setMatchSelected(null);
                 } else {
-                    // No Match
                     setMatchErrorPair({ left: matchSelected, right: item });
                     setMatchSelected(null);
                     setTimeout(() => {
@@ -330,13 +331,11 @@ const LessonPage: React.FC = () => {
         }
     };
 
-    // Draw lines logic
     const renderLines = () => {
         if (currentQuestion?.tipe_latihan !== 'matching-pairs') return null;
 
         return (
             <svg className="absolute inset-0 w-full h-full pointer-events-none z-20 overflow-visible">
-                {/* 1. Matched Lines (Green) */}
                 {matchedPairs.map(id => {
                     const start = itemPositions[`left-${id}`];
                     const end = itemPositions[`right-${id}`];
@@ -347,14 +346,13 @@ const LessonPage: React.FC = () => {
                             key={`match-${id}`}
                             d={`M ${start.x} ${start.y} C ${start.x + 50} ${start.y}, ${end.x - 50} ${end.y}, ${end.x} ${end.y}`}
                             fill="none"
-                            stroke="#16a34a" // green-600
+                            stroke="#16a34a" 
                             strokeWidth="4"
                             strokeLinecap="round"
                         />
                     );
                 })}
 
-                {/* 2. Error Lines (Red) */}
                 {matchErrorPair && (
                     <path 
                         d={( () => {
@@ -366,14 +364,13 @@ const LessonPage: React.FC = () => {
                             return `M ${start.x} ${start.y} C ${start.x + 50} ${start.y}, ${end.x - 50} ${end.y}, ${end.x} ${end.y}`;
                         })()}
                         fill="none"
-                        stroke="#dc2626" // red-600
+                        stroke="#dc2626" 
                         strokeWidth="4"
                         strokeDasharray="5,5"
                         strokeLinecap="round"
                     />
                 )}
 
-                {/* 3. Active Drag Line (Blue) */}
                 {matchSelected && (
                     <path 
                         d={( () => {
@@ -381,7 +378,6 @@ const LessonPage: React.FC = () => {
                             const start = itemPositions[key];
                             if (!start) return '';
                             
-                            // Curve logic changes depending on which side started
                             const isLeftStart = matchSelected.side === 'left';
                             const cp1x = isLeftStart ? start.x + 50 : start.x - 50;
                             const cp2x = isLeftStart ? cursorPos.x - 50 : cursorPos.x + 50;
@@ -389,7 +385,7 @@ const LessonPage: React.FC = () => {
                             return `M ${start.x} ${start.y} C ${cp1x} ${start.y}, ${cp2x} ${cursorPos.y}, ${cursorPos.x} ${cursorPos.y}`;
                         })()}
                         fill="none"
-                        stroke="#3b82f6" // blue-500
+                        stroke="#3b82f6" 
                         strokeWidth="4"
                         strokeLinecap="round"
                         style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.1))' }}
@@ -494,38 +490,52 @@ const LessonPage: React.FC = () => {
                         )}
 
                         {currentQuestion.tipe_latihan === 'drag-and-drop' && (
-                            <div className="space-y-8 w-full max-w-2xl">
+                            <div className="space-y-8 w-full max-w-2xl select-none">
                                 {/* Area Jawaban (Drop Zone) */}
-                                <div className="min-h-[80px] p-2 border-b-2 border-gray-200 flex flex-wrap gap-2 items-center justify-center transition-colors">
-                                    {dragSelectedWords.length === 0 && (
-                                        <span className="text-gray-400 text-sm select-none">Ketuk kata untuk menyusun kalimat</span>
+                                <div 
+                                    onDragOver={(e) => handleDragOver(e, 'selected')}
+                                    onDragLeave={() => handleDragLeave('selected')}
+                                    onDrop={(e) => handleDrop(e, 'selected')}
+                                    className={`min-h-[100px] p-4 border-2 rounded-2xl flex flex-wrap gap-2 items-center justify-center transition-all duration-300
+                                        ${isDraggingOverTarget ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200 scale-[1.02]' : 'border-gray-200 bg-gray-50'}
+                                    `}
+                                >
+                                    {dragSelectedWords.length === 0 && !isDraggingOverTarget && (
+                                        <span className="text-gray-400 text-sm pointer-events-none">Seret kata ke sini untuk menyusun kalimat</span>
                                     )}
                                     {dragSelectedWords.map((word) => (
                                         <button
                                             key={word.id}
-                                            onClick={() => handleWordClick(word, 'selected')}
+                                            draggable={isCorrect === null}
+                                            onDragStart={(e) => handleDragStart(e, word, 'selected')}
+                                            onClick={() => handleWordMove(word, 'selected')}
                                             disabled={isCorrect !== null}
-                                            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-xl shadow-sm text-gray-800 font-bold hover:bg-red-50 hover:border-red-200 transition-all animate-fade-in"
+                                            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-xl shadow-sm text-gray-800 font-bold hover:bg-red-50 hover:border-red-200 transition-all animate-fade-in cursor-move active:cursor-grabbing"
                                         >
                                             {word.text}
                                         </button>
                                     ))}
                                 </div>
 
-                                {/* Bank Kata (Source) */}
-                                <div className="flex flex-wrap gap-3 justify-center">
+                                <div 
+                                    onDragOver={(e) => handleDragOver(e, 'available')}
+                                    onDrop={(e) => handleDrop(e, 'available')}
+                                    className="flex flex-wrap gap-3 justify-center p-4 rounded-xl border border-transparent min-h-[80px]"
+                                >
                                     {dragAvailableWords.map((word) => (
                                         <button
                                             key={word.id}
-                                            onClick={() => handleWordClick(word, 'available')}
+                                            draggable={isCorrect === null}
+                                            onDragStart={(e) => handleDragStart(e, word, 'available')}
+                                            onClick={() => handleWordMove(word, 'available')}
                                             disabled={isCorrect !== null}
-                                            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-xl shadow-[0_2px_0_0_rgba(0,0,0,0.1)] active:shadow-none active:translate-y-[2px] text-gray-800 font-bold hover:bg-gray-50 transition-all"
+                                            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-xl shadow-[0_2px_0_0_rgba(0,0,0,0.1)] active:shadow-none active:translate-y-[2px] text-gray-800 font-bold hover:bg-gray-50 transition-all cursor-move active:cursor-grabbing"
                                         >
                                             {word.text}
                                         </button>
                                     ))}
                                     {dragAvailableWords.length === 0 && (
-                                         <div className="h-10 w-full"></div>
+                                         <div className="text-gray-300 text-sm font-bold pointer-events-none self-center">Kosong</div>
                                     )}
                                 </div>
                             </div>
@@ -637,10 +647,8 @@ const LessonPage: React.FC = () => {
     
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
-            <div className="w-full p-4">
-                <div className="w-full bg-gray-200 rounded-full h-4">
-                    <div className="bg-green-500 h-4 rounded-full transition-all duration-500" style={{ width: `${progressPercentage}%` }}></div>
-                </div>
+            <div className="w-full max-w-4xl mx-auto p-4">
+               <ProgressBar percentage={progressPercentage} height="h-4" />
             </div>
             <div className="flex-grow flex flex-col items-center justify-center p-4">
                 {renderContent()}

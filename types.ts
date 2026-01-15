@@ -4,6 +4,8 @@ export enum Language {
   MANDARIN = 'MANDARIN',
 }
 
+export type TopicLevel = 'Beginner' | 'Intermediate' | 'Advanced';
+
 // Representasi tabel 'Pengguna'
 export interface DBUser {
   id: string; // Changed to string to support Supabase UUID
@@ -33,6 +35,7 @@ export interface DBTopic {
   urutan: number;
   xp_reward: number;
   icon: string;
+  level: TopicLevel; // New Field
 }
 
 // Representasi tabel 'Kosakata' (Bagian dari materi topik)

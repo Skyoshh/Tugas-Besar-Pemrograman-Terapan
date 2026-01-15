@@ -3,15 +3,17 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useUser } from '../hooks/useUser';
 import { Language } from '../types';
+import { TrophyIcon } from './icons';
+import { UKFlag, ChinaFlag } from './Flags';
 
 const Header: React.FC = () => {
   const { user, logout } = useUser();
   const navigate = useNavigate();
 
   const getFlag = (lang: Language | null) => {
-    if (lang === Language.ENGLISH) return '🇬🇧';
-    if (lang === Language.MANDARIN) return '🇨🇳';
-    return '🏳️';
+    if (lang === Language.ENGLISH) return <UKFlag className="w-6 h-4 rounded-sm shadow-sm object-cover" />;
+    if (lang === Language.MANDARIN) return <ChinaFlag className="w-6 h-4 rounded-sm shadow-sm object-cover" />;
+    return <span className="text-lg">🏳️</span>;
   };
 
   const handleLogout = () => {
@@ -19,7 +21,6 @@ const Header: React.FC = () => {
     navigate('/');
   };
   
-  // Tentukan link logo: Admin ke /admin, User ke / (atau dashboard)
   const logoLink = user?.role === 'admin' ? '/admin' : '/';
   const isAdmin = user?.role === 'admin';
 
@@ -34,11 +35,18 @@ const Header: React.FC = () => {
             </NavLink>
              <div className="hidden md:flex items-center space-x-4 pl-4">
               
-              {/* Hide Learning Dashboard link for Admin to keep it purely Admin focused */}
+              
+
               {!isAdmin && (
-                <NavLink to="/dashboard" className={({isActive}) => `px-3 py-2 rounded-md text-sm font-medium ${isActive ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'}`}>
-                    Belajar
-                </NavLink>
+                <>
+                    <NavLink to="/dashboard" className={({isActive}) => `px-3 py-2 rounded-md text-sm font-medium ${isActive ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'}`}>
+                        Belajar
+                    </NavLink>
+                    <NavLink to="/leaderboard" className={({isActive}) => `px-3 py-2 rounded-md text-sm font-medium flex items-center gap-1 ${isActive ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'}`}>
+                        <TrophyIcon className="w-4 h-4" />
+                        Peringkat
+                    </NavLink>
+                </>
               )}
               
               <NavLink to="/profile" className={({isActive}) => `px-3 py-2 rounded-md text-sm font-medium ${isActive ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'}`}>
@@ -60,7 +68,7 @@ const Header: React.FC = () => {
             </div>
           </div>
           
-          {/* Status Bar: Only for regular learners */}
+          
           {user && user.learning_language && !isAdmin && (
              <div className="flex items-center space-x-4">
                <div className="flex items-center space-x-1 text-orange-500 font-bold">
@@ -72,7 +80,7 @@ const Header: React.FC = () => {
                  <span>{user.total_xp} XP</span>
                </div>
                 <div className="flex items-center space-x-2">
-                 <span>{getFlag(user.learning_language)}</span>
+                 {getFlag(user.learning_language)}
                </div>
              </div>
           )}

@@ -4,6 +4,7 @@ import { useUser } from '../hooks/useUser';
 import { Language, DBUserProgress } from '../types';
 import { Navigate, Link } from 'react-router-dom';
 import { databaseService } from '../services/database';
+import { UKFlag, ChinaFlag } from '../components/Flags';
 
 const ProfilePage: React.FC = () => {
     const { user, resetProgress, selectLanguage, logout } = useUser();
@@ -24,7 +25,7 @@ const ProfilePage: React.FC = () => {
     }
 
     const languageName = user.learning_language === Language.ENGLISH ? 'Bahasa Inggris' : 'Bahasa Mandarin';
-    const flag = user.learning_language === Language.ENGLISH ? '🇬🇧' : '🇨🇳';
+    const FlagIcon = user.learning_language === Language.ENGLISH ? UKFlag : ChinaFlag;
 
     const handleReset = async () => {
         if (window.confirm('Apakah Anda yakin ingin mengatur ulang kemajuan Anda untuk bahasa ini? Tindakan ini tidak dapat diurungkan.')) {
@@ -68,7 +69,12 @@ const ProfilePage: React.FC = () => {
                  <div className="space-y-4">
                     <p className="font-semibold text-gray-700">Kursus Aktif:</p>
                     <div className="flex items-center justify-between p-4 border rounded-lg">
-                        <span className="text-lg font-bold text-gray-800">{flag} {languageName}</span>
+                        <div className="flex items-center gap-3">
+                             <div className="w-8 h-5 rounded overflow-hidden shadow-sm border border-gray-100">
+                                <FlagIcon className="w-full h-full object-cover" />
+                             </div>
+                             <span className="text-lg font-bold text-gray-800">{languageName}</span>
+                        </div>
                          <Link to="/select-language" className="text-blue-600 hover:underline font-semibold">Ganti</Link>
                     </div>
                     
